@@ -1,0 +1,6 @@
+{
+  "name": "MotoPièces Pro - Vente Pièces Moto & Application Mobile",
+  "description": "Boutique en ligne et application mobile de pièces de moto avec gestion des acomptes 70% (>200$), validation des comptes clients par numéro d'entreprise et espace administrateur complet.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

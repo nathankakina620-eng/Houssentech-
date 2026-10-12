@@ -1,0 +1,121 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#090d16" />
+      <stop offset="50%" stop-color="#0f172a" />
+      <stop offset="100%" stop-color="#020617" />
+    </linearGradient>
+
+    <linearGradient id="redGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ef4444" />
+      <stop offset="50%" stop-color="#dc2626" />
+      <stop offset="100%" stop-color="#991b1b" />
+    </linearGradient>
+
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fbbf24" />
+      <stop offset="100%" stop-color="#d97706" />
+    </linearGradient>
+
+    <linearGradient id="silverGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="50%" stop-color="#cbd5e1" />
+      <stop offset="100%" stop-color="#64748b" />
+    </linearGradient>
+
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="8" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#dc2626" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <!-- Background rounded squircle / app badge -->
+  <rect width="512" height="512" rx="118" fill="url(#bgGrad)" />
+  <rect width="504" height="504" x="4" y="4" rx="114" fill="none" stroke="url(#redGrad)" stroke-width="4" stroke-opacity="0.4" />
+
+  <!-- Outer circular gear ring / brake rotor teeth -->
+  <g filter="url(#shadow)">
+    <circle cx="256" cy="226" r="172" fill="none" stroke="url(#redGrad)" stroke-width="8" stroke-dasharray="28 14" opacity="0.9" />
+    <circle cx="256" cy="226" r="150" fill="#0b1120" stroke="#334155" stroke-width="4" />
+    
+    <!-- Rotor ventilation drill holes -->
+    <g fill="#1e293b">
+      <circle cx="256" cy="96" r="7" />
+      <circle cx="256" cy="356" r="7" />
+      <circle cx="126" cy="226" r="7" />
+      <circle cx="386" cy="226" r="7" />
+      <circle cx="164" cy="134" r="6" />
+      <circle cx="348" cy="134" r="6" />
+      <circle cx="164" cy="318" r="6" />
+      <circle cx="348" cy="318" r="6" />
+    </g>
+
+    <!-- Speed Wings Behind Moto -->
+    <path d="M120 185 L210 185 L180 205 L110 205 Z" fill="url(#goldGrad)" opacity="0.85" />
+    <path d="M302 185 L392 185 L402 205 L332 205 Z" fill="url(#goldGrad)" opacity="0.85" />
+    <path d="M140 215 L220 215 L200 230 L130 230 Z" fill="url(#redGrad)" opacity="0.75" />
+    <path d="M292 215 L372 215 L382 230 L312 230 Z" fill="url(#redGrad)" opacity="0.75" />
+
+    <!-- Motorcycle Body & Mechanical Parts -->
+    <!-- Front and Rear Wheels / Rims -->
+    <g>
+      <!-- Rear Wheel -->
+      <circle cx="170" cy="272" r="44" fill="#020617" stroke="url(#redGrad)" stroke-width="12" />
+      <circle cx="170" cy="272" r="22" fill="#1e293b" stroke="#f8fafc" stroke-width="4" />
+      <circle cx="170" cy="272" r="8" fill="#ef4444" />
+
+      <!-- Front Wheel -->
+      <circle cx="342" cy="272" r="44" fill="#020617" stroke="url(#redGrad)" stroke-width="12" />
+      <circle cx="342" cy="272" r="22" fill="#1e293b" stroke="#f8fafc" stroke-width="4" />
+      <circle cx="342" cy="272" r="8" fill="#ef4444" />
+    </g>
+
+    <!-- Racing Moto Frame, Engine Piston & Fairing -->
+    <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <!-- Chassis / Frame Tubes -->
+      <path d="M170 272 L230 220 L290 220 L342 272" stroke="url(#silverGrad)" stroke-width="14" />
+      <path d="M230 220 L256 160 L290 220" stroke="url(#silverGrad)" stroke-width="14" />
+
+      <!-- Fuel Tank & Racing Fairing -->
+      <path d="M210 190 Q256 142 300 178 L318 200 L250 206 Z" fill="url(#redGrad)" stroke="#ef4444" stroke-width="4" />
+      
+      <!-- Aerodynamic Windscreen & Handlebars -->
+      <path d="M285 162 L320 156 L332 176" stroke="url(#goldGrad)" stroke-width="10" />
+      <circle cx="330" cy="154" r="6" fill="#fbbf24" />
+
+      <!-- Engine Block / Piston Accent -->
+      <rect x="236" y="222" width="40" height="34" rx="6" fill="#1e293b" stroke="url(#silverGrad)" stroke-width="4" />
+      <line x1="242" y1="232" x2="270" y2="232" stroke="#ef4444" stroke-width="3" />
+      <line x1="242" y1="242" x2="270" y2="242" stroke="#ef4444" stroke-width="3" />
+      <line x1="242" y1="250" x2="270" y2="250" stroke="#ef4444" stroke-width="3" />
+
+      <!-- Exhaust Pipe / Muffler -->
+      <path d="M246 256 L205 264 L160 252" stroke="#94a3b8" stroke-width="9" />
+      <path d="M160 252 L142 248" stroke="url(#goldGrad)" stroke-width="11" />
+
+      <!-- Front Shock Absorber Fork -->
+      <path d="M320 176 L342 272" stroke="url(#goldGrad)" stroke-width="9" />
+    </g>
+
+    <!-- Speed Lightning Bolt / Crest at Top -->
+    <polygon points="256,108 266,136 248,136 260,162 242,142 258,142" fill="url(#goldGrad)" />
+  </g>
+
+  <!-- Typography: HOUSSETECH -->
+  <g text-anchor="middle" id="brand-typography">
+    <!-- Brand Name with 3D shadow and dual color -->
+    <text x="256" y="428" font-family="'Impact', 'Arial Black', -apple-system, sans-serif" font-weight="900" font-size="46" letter-spacing="4">
+      <tspan fill="#ffffff">HOUSSE</tspan><tspan fill="#ef4444">TECH</tspan>
+    </text>
+
+    <!-- Subtitle Badge: PIÈCES MOTO • KINSHASA -->
+    <rect x="100" y="446" width="312" height="26" rx="13" fill="#1e293b" stroke="#334155" stroke-width="2" />
+    <text x="256" y="464" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-weight="800" font-size="12.5" fill="#f59e0b" letter-spacing="5">
+      PIÈCES MOTO • KINSHASA
+    </text>
+  </g>
+</svg>
