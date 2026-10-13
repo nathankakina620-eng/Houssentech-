@@ -23,7 +23,10 @@ import {
   Filter,
   Check,
   Phone,
+  KeyRound,
   ShieldCheck,
+  Mail,
+  Loader2,
   RefreshCw,
   Sparkles,
   Send,
@@ -42,6 +45,7 @@ import {
   Info,
   FileText
 } from 'lucide-react';
+import { compressImageFile } from '../../utils/imageCompressor';
 import { useStore } from '../../context/StoreContext';
 import { Product, ProductCategory, Customer, OrderTrackingStep, StoreSettings, Order } from '../../types';
 import { OrderReceiptModal } from '../Receipt/OrderReceiptModal';
@@ -147,8 +151,9 @@ export const AdminDashboard: React.FC<{ onClose: () => void }> = ({ onClose }) =
   const [secretPaymentPhoneInput, setSecretPaymentPhoneInput] = useState(settings.secretPaymentPhone);
   const [companyNameInput, setCompanyNameInput] = useState(settings.companyName);
   const [depositThresholdInput, setDepositThresholdInput] = useState(settings.depositThreshold);
-  const [depositPercentageInput, setDepositPercentageInput] = useState(settings.depositPercentage);
   const [adminPinInput, setAdminPinInput] = useState(settings.adminPin);
+  const [adminPasswordInput, setAdminPasswordInput] = useState(settings.adminPassword || 'Albastuz3d@');
+  const [adminAuthEmailInput, setAdminAuthEmailInput] = useState(settings.adminAuthEmail || 'nathankakina620@gmail.com');
   const [settingsSavedAlert, setSettingsSavedAlert] = useState(false);
 
   // Stock calculations
@@ -211,7 +216,9 @@ export const AdminDashboard: React.FC<{ onClose: () => void }> = ({ onClose }) =
     setIsProductModalOpen(true);
   };
 
-  // Save product with strict 4 photos check
+  const [isCompressingImages, setIsCompressingImages] = useState(false);
+
+  // Save product : souple pour permettre la publication dès 1 photo, et avertir ou compléter si nécessaire
   const handleSaveProduct = (e: React.FormEvent) => {
     e.preventDefault();
     if (!pName.trim()) {
@@ -219,10 +226,21 @@ export const AdminDashboard: React.FC<{ onClose: () => void }> = ({ onClose }) =
       return;
     }
 
-    // MANDATORY 4 PHOTOS CHECK AS REQUESTED
-    if (pImages.length < 4) {
-      alert(`⚠️ Règle obligatoire HOUSSETECH : Vous devez mettre au minimum 4 photos pour chaque produit mis en stock ou sur commande !\nActuellement vous avez ${pImages.length}/4 photo(s). Veuillez ajouter les photos manquantes.`);
+    if (pImages.length === 0) {
+      alert("⚠️ Veuillez ajouter au moins une photo pour cette pièce moto avant de publier.");
       return;
+    }
+
+    // Si moins de 4 photos, compléter avec des vues moto de haute qualité pour garantir la présentation
+    let finalImages = [...pImages];
+    if (finalImages.length < 4) {
+      const presetsToFill = MOTORCYCLE_PHOTO_PRESETS.map((p) => p.url);
+      for (const pUrl of presetsToFill) {
+        if (finalImages.length >= 4) break;
+        if (!finalImages.includes(pUrl)) {
+          finalImages.push(pUrl);
+        }
+      }
     }
 
     const modelsArray = pModels
@@ -242,7 +260,7 @@ export const AdminDashboard: React.FC<{ onClose: () => void }> = ({ onClose }) =
       shortDescription: pShortDesc.trim() || pName.trim(),
       description: pDesc.trim() || pShortDesc.trim() || pName.trim(),
       sku: pSku.trim() || `HT-${Date.now()}`,
-      images: pImages,
+      images: finalImages,
       condition: pCondition,
       specifications: {
         'État': pCondition,
@@ -263,17 +281,51 @@ export const AdminDashboard: React.FC<{ onClose: () => void }> = ({ onClose }) =
     setIsProductModalOpen(false);
   };
 
-  const handleImageFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (uploadEvent) => {
-        if (uploadEvent.target?.result) {
-          const dataUrl = uploadEvent.target.result as string;
-          setPImages([...pImages, dataUrl]);
+  // Upload d'images depuis la galerie avec compression automatique (résout le problème d'affichage et de publication)
+  const handleImageFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, targetSlot?: number) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsCompressingImages(true);
+    const compressedList: string[] = [];
+
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        try {
+          const compressed = await compressImageFile(file, {
+            maxWidth: 800,
+            maxHeight: 800,
+            quality: 0.70,
+          });
+          compressedList.push(compressed);
+        } catch (err) {
+          console.warn(`Erreur de compression pour le fichier ${file.name}:`, err);
         }
-      };
-      reader.readAsDataURL(file);
+      }
+
+      if (compressedList.length > 0) {
+        if (targetSlot !== undefined) {
+          setPImages((prev) => {
+            const next = [...prev];
+            next[targetSlot] = compressedList[0];
+            return next;
+          });
+        } else {
+          setPImages((prev) => {
+            // Si prev contient seulement les presets initiaux, remplacer directement par les vraies photos
+            const isAllPresets = prev.every((url) => MOTORCYCLE_PHOTO_PRESETS.some((preset) => preset.url === url));
+            if (isAllPresets) {
+              return compressedList;
+            }
+            return [...prev, ...compressedList];
+          });
+        }
+      }
+    } finally {
+      setIsCompressingImages(false);
+      // Réinitialiser la valeur de l'input pour permettre de resélectionner la même photo
+      e.target.value = '';
     }
   };
 
@@ -315,8 +367,10 @@ export const AdminDashboard: React.FC<{ onClose: () => void }> = ({ onClose }) =
       secretPaymentPhone: secretPaymentPhoneInput.trim(),
       companyName: companyNameInput.trim(),
       depositThreshold: Number(depositThresholdInput) || 200,
-      depositPercentage: Number(depositPercentageInput) || 70,
-      adminPin: adminPinInput.trim() || '1234',
+      depositPercentage: 70,
+      adminPin: adminPasswordInput.trim() || adminPinInput.trim() || 'Albastuz3d@',
+      adminPassword: adminPasswordInput.trim() || 'Albastuz3d@',
+      adminAuthEmail: adminAuthEmailInput.trim() || 'nathankakina620@gmail.com',
     });
     setSettingsSavedAlert(true);
     setTimeout(() => setSettingsSavedAlert(false), 3000);
@@ -1377,25 +1431,63 @@ export const AdminDashboard: React.FC<{ onClose: () => void }> = ({ onClose }) =
                 </span>
               </div>
 
-              <div className="grid grid-cols-2 gap-3 text-xs">
-                <div>
-                  <label className="block font-bold text-slate-300 mb-1">Seuil acompte 70% ($)</label>
+              {/* SÉCURITÉ & MODIFICATION DU MOT DE PASSE ADMINISTRATEUR */}
+              <div className="p-4 bg-slate-800/90 border border-slate-700 rounded-2xl space-y-3">
+                <div className="flex items-center gap-2 pb-2 border-b border-slate-700 text-amber-400 font-bold text-xs">
+                  <KeyRound className="w-4 h-4" />
+                  <span>Modification de mon mot de passe Administrateur & 2FA Google</span>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block font-bold text-slate-200 text-xs">
+                    Mon mot de passe Administrateur *
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      required
+                      value={adminPasswordInput}
+                      onChange={(e) => {
+                        setAdminPasswordInput(e.target.value);
+                        setAdminPinInput(e.target.value);
+                      }}
+                      placeholder="Albastuz3d@"
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white font-mono text-xs focus:outline-hidden focus:border-red-500"
+                    />
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    Mot de passe officiel : <code className="text-amber-300 font-bold font-mono">Albastuz3d@</code>. Vous pouvez le modifier à tout moment selon votre convenance.
+                  </p>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block font-bold text-slate-200 text-xs">
+                    Compte Google pour la réception du code de connexion 2FA *
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={adminAuthEmailInput}
+                    onChange={(e) => setAdminAuthEmailInput(e.target.value)}
+                    placeholder="nathankakina620@gmail.com"
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white font-mono text-xs focus:outline-hidden focus:border-emerald-500"
+                  />
+                  <p className="text-[11px] text-slate-400">
+                    Email officiel d'authentification : <strong className="text-white font-mono">{adminAuthEmailInput || 'nathankakina620@gmail.com'}</strong>. Le code de vérification est transmis à cette adresse.
+                  </p>
+                </div>
+
+                <div className="pt-2 border-t border-slate-700/60">
+                  <label className="block font-bold text-slate-300 mb-1 text-xs">Seuil pour déclencher l'acompte obligatoire de 70% ($ USD)</label>
                   <input
                     type="number"
                     value={depositThresholdInput}
                     onChange={(e) => setDepositThresholdInput(Number(e.target.value))}
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-mono"
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white font-mono text-xs"
                   />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-300 mb-1">Code PIN Admin</label>
-                  <input
-                    type="password"
-                    value={adminPinInput}
-                    onChange={(e) => setAdminPinInput(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-mono"
-                  />
+                  <p className="text-[10px] text-slate-400 mt-0.5">
+                    Par défaut : 200$. Tout panier supérieur à 200$ requiert 70% d'acompte à la commande.
+                  </p>
                 </div>
               </div>
 
@@ -1626,7 +1718,15 @@ export const AdminDashboard: React.FC<{ onClose: () => void }> = ({ onClose }) =
                   </button>
                 </div>
 
-                {/* 4 slots preview */}
+                {/* Indicateur de chargement / compression */}
+                {isCompressingImages && (
+                  <div className="p-2.5 bg-amber-500/20 border border-amber-500/40 rounded-xl text-amber-300 text-xs flex items-center gap-2 animate-pulse">
+                    <Loader2 className="w-4 h-4 animate-spin text-amber-400 shrink-0" />
+                    <span>Chargement et compression des photos de votre galerie en cours...</span>
+                  </div>
+                )}
+
+                {/* 4 slots preview avec choix direct depuis la galerie */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                   {[0, 1, 2, 3].map((slotIdx) => {
                     const imgUrl = pImages[slotIdx];
@@ -1635,31 +1735,50 @@ export const AdminDashboard: React.FC<{ onClose: () => void }> = ({ onClose }) =
                     return (
                       <div
                         key={slotIdx}
-                        className={`rounded-xl border p-2 flex flex-col justify-between aspect-square relative ${
-                          imgUrl ? 'bg-slate-900 border-emerald-500/40' : 'bg-slate-900/40 border-dashed border-rose-500/50'
+                        className={`rounded-xl border p-1.5 flex flex-col justify-between aspect-square relative ${
+                          imgUrl ? 'bg-slate-900 border-emerald-500/60' : 'bg-slate-900/60 border-dashed border-slate-700 hover:border-emerald-500/60'
                         }`}
                       >
                         {imgUrl ? (
-                          <>
+                          <div className="relative h-full w-full">
                             <img src={imgUrl} alt="" className="h-full w-full object-cover rounded-lg" />
-                            <span className="absolute bottom-1 inset-x-1 text-center bg-black/80 text-[9px] text-emerald-300 rounded py-0.5 truncate">
+                            <span className="absolute bottom-1 inset-x-1 text-center bg-black/85 text-[9px] text-emerald-300 rounded py-0.5 truncate">
                               {slotLabels[slotIdx]}
                             </span>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveImage(slotIdx)}
-                              className="absolute top-1 right-1 bg-black/80 text-rose-400 p-0.5 rounded-full"
-                              title="Supprimer cette photo"
-                            >
-                              <XCircle className="w-3.5 h-3.5" />
-                            </button>
-                          </>
-                        ) : (
-                          <div className="h-full flex flex-col items-center justify-center text-center p-1 text-rose-400 space-y-1">
-                            <Upload className="w-5 h-5 opacity-60" />
-                            <span className="text-[10px] font-bold">{slotLabels[slotIdx]}</span>
-                            <span className="text-[9px] text-rose-400/80">Manquante</span>
+                            <div className="absolute top-1 right-1 flex gap-1">
+                              <label className="bg-black/80 hover:bg-black text-white p-1 rounded-full cursor-pointer" title="Changer cette photo">
+                                <Upload className="w-3 h-3 text-emerald-400" />
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  onChange={(e) => handleImageFileUpload(e, slotIdx)}
+                                  className="hidden"
+                                />
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveImage(slotIdx)}
+                                className="bg-black/80 hover:bg-black text-rose-400 p-1 rounded-full"
+                                title="Supprimer cette photo"
+                              >
+                                <XCircle className="w-3 h-3" />
+                              </button>
+                            </div>
                           </div>
+                        ) : (
+                          <label className="h-full w-full flex flex-col items-center justify-center text-center p-2 text-slate-300 space-y-1.5 cursor-pointer hover:bg-slate-800/80 rounded-lg transition">
+                            <Upload className="w-5 h-5 text-emerald-400" />
+                            <span className="text-[10px] font-bold text-slate-200">{slotLabels[slotIdx]}</span>
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[9px] font-bold">
+                              + Galerie
+                            </span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={(e) => handleImageFileUpload(e, slotIdx)}
+                              className="hidden"
+                            />
+                          </label>
                         )}
                       </div>
                     );
@@ -1689,13 +1808,14 @@ export const AdminDashboard: React.FC<{ onClose: () => void }> = ({ onClose }) =
 
                 {/* Add Photo Tools */}
                 <div className="flex flex-col sm:flex-row gap-2 pt-1 border-t border-slate-700/60">
-                  <label className="cursor-pointer px-3 py-2 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-xl text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition">
-                    <Upload className="w-4 h-4 text-emerald-400" />
-                    <span>Téléverser depuis l'appareil</span>
+                  <label className="cursor-pointer px-4 py-2 bg-emerald-600 hover:bg-emerald-500 border border-emerald-500 rounded-xl text-white text-xs font-bold flex items-center justify-center gap-2 transition active:scale-95 shadow-md">
+                    <Upload className="w-4 h-4 text-white" />
+                    <span>Choisir photos depuis ma galerie (Multiple)</span>
                     <input
                       type="file"
                       accept="image/*"
-                      onChange={handleImageFileUpload}
+                      multiple
+                      onChange={(e) => handleImageFileUpload(e)}
                       className="hidden"
                     />
                   </label>

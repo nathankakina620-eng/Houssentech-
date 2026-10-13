@@ -25,7 +25,6 @@ interface Props {
   onOpenCart: () => void;
   onOpenLogin: () => void;
   onOpenRegister: () => void;
-  onOpenAdmin: () => void;
   onOpenChat: () => void;
   onOpenTracking: () => void;
   viewAngle: 'all' | 'stock' | 'order';
@@ -36,7 +35,6 @@ export const Header: React.FC<Props> = ({
   onOpenCart,
   onOpenLogin,
   onOpenRegister,
-  onOpenAdmin,
   onOpenChat,
   onOpenTracking,
   viewAngle,
@@ -61,30 +59,7 @@ export const Header: React.FC<Props> = ({
   const inStockCount = products.filter((p) => p.availabilityType === 'en_stock' || p.stock > 0).length;
   const orderCount = products.filter((p) => p.availabilityType === 'sur_commande' || p.stock === 0).length;
 
-  const [isAdminPinModalOpen, setIsAdminPinModalOpen] = useState(false);
-  const [pinInput, setPinInput] = useState('');
-  const [pinError, setPinError] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-
-  const handleAdminClick = () => {
-    if (isAdmin) {
-      onOpenAdmin();
-    } else {
-      setIsAdminPinModalOpen(true);
-    }
-  };
-
-  const handlePinSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (loginAdmin(pinInput)) {
-      setIsAdminPinModalOpen(false);
-      setPinInput('');
-      setPinError(false);
-      onOpenAdmin();
-    } else {
-      setPinError(true);
-    }
-  };
 
   return (
     <>
@@ -212,14 +187,14 @@ export const Header: React.FC<Props> = ({
               </span>
             </button>
 
-            {/* Suivi Colis Kinshasa Button */}
+            {/* Suivi Colis & Angle Client Button */}
             <button
               onClick={onOpenTracking}
               className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 dark:bg-slate-900 light:bg-slate-100 border border-slate-800 dark:border-slate-800 light:border-slate-300 text-xs font-semibold text-slate-300 dark:text-slate-300 light:text-slate-700 hover:text-white transition"
-              title="Suivre l'acheminement de mon colis vers Kinshasa"
+              title="Ouvrir mon Angle Client (Commandes, Articles acceptés & Discussion gérant)"
             >
               <Truck className="w-3.5 h-3.5 text-red-400" />
-              <span>Suivi Colis</span>
+              <span>Mon Angle Client</span>
             </button>
 
             {/* In-Site Chat Button */}
@@ -241,11 +216,17 @@ export const Header: React.FC<Props> = ({
 
             {/* Customer Account / Registration status */}
             {currentUser ? (
-              <div className="hidden lg:flex items-center gap-2 bg-slate-900 dark:bg-slate-900 light:bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-800 dark:border-slate-800 light:border-slate-300 text-xs">
-                <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                <span className="font-semibold text-white dark:text-white light:text-slate-900 truncate max-w-[100px]">
-                  {currentUser.fullName}
-                </span>
+              <div className="hidden lg:flex items-center gap-1.5 bg-slate-900 dark:bg-slate-900 light:bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-800 dark:border-slate-800 light:border-slate-300 text-xs">
+                <button
+                  onClick={onOpenTracking}
+                  className="flex items-center gap-2 hover:opacity-80 transition text-left"
+                  title="Ouvrir mon Angle Client"
+                >
+                  <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                  <span className="font-semibold text-white dark:text-white light:text-slate-900 truncate max-w-[100px]">
+                    {currentUser.fullName}
+                  </span>
+                </button>
                 <button
                   onClick={logout}
                   className="text-slate-400 hover:text-rose-400 ml-1"
@@ -270,21 +251,6 @@ export const Header: React.FC<Props> = ({
                 </button>
               </div>
             )}
-
-            {/* Admin Dashboard shortcut button */}
-            <button
-              onClick={handleAdminClick}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition ${
-                isAdmin
-                  ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/30'
-                  : 'bg-slate-800/80 hover:bg-slate-800 text-slate-300 border border-slate-700'
-              }`}
-              title="Accès Administrateur Boutique"
-            >
-              <Lock className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">{isAdmin ? 'Admin Actif' : 'Espace Admin'}</span>
-              <span className="sm:hidden">Admin</span>
-            </button>
 
             {/* Cart Trigger */}
             <button
@@ -373,57 +339,6 @@ export const Header: React.FC<Props> = ({
         )}
       </header>
 
-      {/* Admin PIN Prompt Modal */}
-      {isAdminPinModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-slate-900 border border-slate-700 p-5 shadow-2xl text-slate-100 space-y-4">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-              <div className="flex items-center gap-2">
-                <Lock className="w-5 h-5 text-red-500" />
-                <h3 className="font-bold text-sm text-white">Espace Administrateur Sécurisé</h3>
-              </div>
-              <button
-                onClick={() => setIsAdminPinModalOpen(false)}
-                className="text-slate-400 hover:text-white"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <p className="text-xs text-slate-300">
-              Entrez votre code PIN pour accéder au tableau de bord (Gestion des pièces, validation des clients, acceptation/refus des commandes et messages) :
-            </p>
-
-            <form onSubmit={handlePinSubmit} className="space-y-3">
-              <input
-                type="password"
-                required
-                autoFocus
-                placeholder="Code PIN (par défaut : 1234)"
-                value={pinInput}
-                onChange={(e) => {
-                  setPinInput(e.target.value);
-                  setPinError(false);
-                }}
-                className="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-center text-lg font-mono tracking-widest text-white focus:outline-hidden focus:border-red-500"
-              />
-
-              {pinError && (
-                <p className="text-xs text-rose-400 text-center font-semibold">
-                  Code PIN incorrect. Le code par défaut est 1234.
-                </p>
-              )}
-
-              <button
-                type="submit"
-                className="w-full py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold text-xs rounded-xl shadow-md transition"
-              >
-                Ouvrir l'Espace Administrateur
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
     </>
   );
 };

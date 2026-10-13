@@ -1,6 +1,7 @@
 import React from 'react';
-import { Home, Truck, ShoppingBag, MessageSquare, User, Lock, MessageCircle } from 'lucide-react';
+import { Home, Truck, ShoppingBag, MessageSquare, MessageCircle } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
+import { PWAInstallButton } from './PWA/PWAInstallButton';
 
 interface Props {
   activeView: 'home' | 'catalog';
@@ -9,7 +10,6 @@ interface Props {
   onOpenCart: () => void;
   onOpenChat: () => void;
   onOpenAccount: () => void;
-  onOpenAdmin: () => void;
   viewAngle: 'all' | 'stock' | 'order';
   onSetAngle: (angle: 'all' | 'stock' | 'order') => void;
 }
@@ -21,11 +21,10 @@ export const MobileAppShell: React.FC<Props> = ({
   onOpenCart,
   onOpenChat,
   onOpenAccount,
-  onOpenAdmin,
   viewAngle,
   onSetAngle,
 }) => {
-  const { cartItemsCount, unreadMessagesCount, isAdmin, settings, getWhatsAppUrl } = useStore();
+  const { cartItemsCount, unreadMessagesCount, settings, getWhatsAppUrl } = useStore();
 
   return (
     <>
@@ -43,95 +42,85 @@ export const MobileAppShell: React.FC<Props> = ({
         </span>
       </a>
 
-      {/* Mobile Bottom Navigation Bar */}
-      <nav className="sm:hidden fixed bottom-0 inset-x-0 z-40 bg-slate-900/95 dark:bg-slate-900/95 light:bg-white/95 backdrop-blur-md border-t border-slate-800 dark:border-slate-800 light:border-slate-200 px-2 py-1.5 flex items-center justify-around">
-        {/* Boutique / Tout */}
+      {/* Mobile Bottom Navigation Bar: Stock, Message, Application, Panier bien disposés */}
+      <nav className="sm:hidden fixed bottom-0 inset-x-0 z-40 bg-slate-900/95 dark:bg-slate-900/95 light:bg-white/95 backdrop-blur-md border-t border-slate-800 dark:border-slate-800 light:border-slate-200 px-1.5 py-1.5 grid grid-cols-6 items-center text-center shadow-lg">
+        {/* 1. Accueil */}
         <button
           onClick={() => {
             onNavigateHome();
             onSetAngle('all');
           }}
-          className={`flex flex-col items-center gap-0.5 p-1 transition ${
+          className={`flex flex-col items-center justify-center gap-0.5 p-1 transition ${
             viewAngle === 'all' ? 'text-red-500 font-bold' : 'text-slate-400 hover:text-white'
           }`}
+          title="Accueil boutique"
         >
           <Home className="w-4 h-4 text-red-500" />
-          <span className="text-[10px] font-semibold text-slate-200">Accueil</span>
+          <span className="text-[10px] font-semibold">Accueil</span>
         </button>
 
-        {/* ANGLE STOCK DÉDIÉ MOBILE */}
+        {/* 2. STOCK : DISPOSITION PRIORITAIRE */}
         <button
           onClick={() => onSetAngle(viewAngle === 'stock' ? 'all' : 'stock')}
-          className={`flex flex-col items-center gap-0.5 p-1 transition ${
+          className={`flex flex-col items-center justify-center gap-0.5 p-1 transition ${
             viewAngle === 'stock' ? 'text-emerald-400 font-bold scale-105' : 'text-slate-400 hover:text-white'
           }`}
+          title="Pièces en stock immédiat"
         >
           <div className="relative">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 absolute -top-0.5 -right-1 animate-pulse" />
             <span className="text-xs font-black">📦</span>
           </div>
-          <span className="text-[10px] font-bold">En Stock</span>
+          <span className="text-[10px] font-bold text-emerald-400">Stock</span>
         </button>
 
-        {/* ANGLE SUR COMMANDE DÉDIÉ MOBILE */}
-        <button
-          onClick={() => onSetAngle(viewAngle === 'order' ? 'all' : 'order')}
-          className={`flex flex-col items-center gap-0.5 p-1 transition ${
-            viewAngle === 'order' ? 'text-blue-400 font-bold scale-105' : 'text-slate-400 hover:text-white'
-          }`}
-        >
-          <span className="text-xs">✈️</span>
-          <span className="text-[10px] font-bold">À Commander</span>
-        </button>
-
-        {/* Suivi Colis */}
-        <button
-          onClick={onOpenTracking}
-          className="flex flex-col items-center gap-0.5 p-1 text-slate-400 hover:text-white"
-        >
-          <Truck className="w-4 h-4" />
-          <span className="text-[10px] font-semibold">Suivi</span>
-        </button>
-
-        {/* Panier */}
-        <button
-          onClick={onOpenCart}
-          className="relative flex flex-col items-center gap-0.5 p-1 text-slate-400 hover:text-white"
-        >
-          <div className="relative">
-            <ShoppingBag className="w-5 h-5" />
-            {cartItemsCount > 0 && (
-              <span className="absolute -top-1.5 -right-2 px-1.5 py-0.2 bg-red-600 text-white rounded-full text-[9px] font-black">
-                {cartItemsCount}
-              </span>
-            )}
-          </div>
-          <span className="text-[10px] font-semibold">Panier</span>
-        </button>
-
-        {/* Chat Site */}
+        {/* 3. MESSAGE : CHAT SITE DIRECT */}
         <button
           onClick={onOpenChat}
-          className="relative flex flex-col items-center gap-0.5 p-1 text-slate-400 hover:text-white"
+          className="relative flex flex-col items-center justify-center gap-0.5 p-1 text-slate-400 hover:text-white transition"
+          title="Discussion directe avec le gérant"
         >
           <div className="relative">
-            <MessageSquare className="w-5 h-5 text-red-500" />
+            <MessageSquare className="w-4 h-4 text-red-400" />
             {unreadMessagesCount > 0 && (
               <span className="absolute -top-1.5 -right-2 px-1 py-0.2 bg-red-600 text-white rounded-full text-[9px] font-black animate-pulse">
                 {unreadMessagesCount}
               </span>
             )}
           </div>
-          <span className="text-[10px] font-semibold">Chat Site</span>
+          <span className="text-[10px] font-semibold text-slate-300">Message</span>
         </button>
 
-        {/* Compte / Admin */}
+        {/* 4. APPLICATION : PWA INSTALL DISPOSITION */}
+        <div className="flex flex-col items-center justify-center">
+          <PWAInstallButton variant="mobile_nav" />
+        </div>
+
+        {/* 5. PANIER : COMMANDE & ACOMPTE */}
         <button
-          onClick={isAdmin ? onOpenAdmin : onOpenAccount}
-          className="flex flex-col items-center gap-0.5 p-1 text-slate-400 hover:text-white"
+          onClick={onOpenCart}
+          className="relative flex flex-col items-center justify-center gap-0.5 p-1 text-slate-400 hover:text-white transition"
+          title="Mon panier d'achats"
         >
-          {isAdmin ? <Lock className="w-5 h-5 text-amber-400" /> : <User className="w-5 h-5" />}
-          <span className="text-[10px] font-semibold">{isAdmin ? 'Admin' : 'Compte'}</span>
+          <div className="relative">
+            <ShoppingBag className="w-4 h-4 text-red-500" />
+            {cartItemsCount > 0 && (
+              <span className="absolute -top-1.5 -right-2 px-1.5 py-0.2 bg-red-600 text-white rounded-full text-[9px] font-black">
+                {cartItemsCount}
+              </span>
+            )}
+          </div>
+          <span className="text-[10px] font-semibold text-slate-300">Panier</span>
+        </button>
+
+        {/* 6. SUIVI : COLIS & DEVIS */}
+        <button
+          onClick={onOpenTracking}
+          className="flex flex-col items-center justify-center gap-0.5 p-1 text-slate-400 hover:text-white transition"
+          title="Suivi de colis & Devis"
+        >
+          <Truck className="w-4 h-4 text-slate-400" />
+          <span className="text-[10px] font-semibold">Suivi</span>
         </button>
       </nav>
     </>

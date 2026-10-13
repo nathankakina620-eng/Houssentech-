@@ -155,6 +155,8 @@ export interface StoreSettings {
   depositPercentage: number; // 70%
   currency: string; // "$"
   adminPin: string; // Default: 1234
+  adminPassword?: string; // Mot de passe administrateur sécurisé (ex: Albastuz3d@)
+  adminAuthEmail?: string; // Email Google lié pour le code d'authentification (nathankakina620@gmail.com)
   shippingScheduleNote: string;
   freeDeliveryThreshold: number; // 200$
   mobileMoneyAccounts: MobileMoneyAccount[];

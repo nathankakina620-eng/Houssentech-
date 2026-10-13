@@ -1,13 +1,97 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @layer base {
   html.light {
     color-scheme: light;
   }
 
+  html.light body {
+    background-color: #f8fafc !important;
+    color: #0f172a !important;
+  }
+
   html.dark {
     color-scheme: dark;
   }
+
+  html.dark body {
+    background-color: #020617 !important;
+    color: #f8fafc !important;
+  }
+}
+
+/* Mode Clair complet, élégant et soigné pour toute l'application HOUSSETECH */
+html.light,
+html.light body,
+html.light #root {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+html.light [class*="bg-slate-950"] {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+
+html.light [class*="bg-slate-900"] {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  color: #0f172a !important;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+}
+
+html.light [class*="bg-slate-800"] {
+  background-color: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+  color: #1e293b !important;
+}
+
+html.light [class*="border-slate-800"],
+html.light [class*="border-slate-700"] {
+  border-color: #e2e8f0 !important;
+}
+
+html.light input:not([type="checkbox"]):not([type="radio"]),
+html.light textarea,
+html.light select {
+  background-color: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+html.light input::placeholder,
+html.light textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+html.light .text-white,
+html.light .text-slate-100,
+html.light .text-slate-200 {
+  color: #0f172a !important;
+}
+
+html.light .text-slate-300,
+html.light .text-slate-400 {
+  color: #475569 !important;
+}
+
+/* Les boutons d'action clés conservent leur texte blanc pour un contraste parfait */
+html.light .bg-red-600,
+html.light .bg-red-500,
+html.light .bg-emerald-600,
+html.light .bg-emerald-500,
+html.light .bg-blue-600,
+html.light [class*="bg-red-600"],
+html.light [class*="bg-emerald-600"] {
+  color: #ffffff !important;
+}
+
+html.light .bg-red-600 *,
+html.light .bg-emerald-600 *,
+html.light .bg-blue-600 * {
+  color: #ffffff !important;
 }
 
 @media print {

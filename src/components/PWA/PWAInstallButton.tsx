@@ -3,18 +3,13 @@ import { Download, Smartphone, X, CheckCircle2, Share2, PlusSquare } from 'lucid
 import { usePWAInstall } from '../../hooks/usePWAInstall';
 
 interface Props {
-  variant?: 'header' | 'banner' | 'floating';
+  variant?: 'header' | 'banner' | 'floating' | 'mobile_nav';
 }
 
 export const PWAInstallButton: React.FC<Props> = ({ variant = 'header' }) => {
   const { isInstallable, isInstalled, isIOS, install } = usePWAInstall();
   const [showIOSGuide, setShowIOSGuide] = useState(false);
   const [showAndroidGuide, setShowAndroidGuide] = useState(false);
-
-  // If already installed, hide
-  if (isInstalled) {
-    return null;
-  }
 
   // Handle click for desktop/Android vs iOS vs fallback
   const handleClick = async () => {
@@ -26,6 +21,109 @@ export const PWAInstallButton: React.FC<Props> = ({ variant = 'header' }) => {
       setShowAndroidGuide(true);
     }
   };
+
+  if (variant === 'mobile_nav') {
+    return (
+      <>
+        <button
+          onClick={handleClick}
+          className="flex flex-col items-center gap-0.5 p-1 text-slate-400 hover:text-white transition group"
+          title="Installer l'application HOUSSETECH sur mon téléphone"
+        >
+          <div className="relative">
+            <Smartphone className="w-5 h-5 text-amber-400 group-hover:scale-110 transition-transform" />
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 absolute -top-0.5 -right-1 animate-ping" />
+          </div>
+          <span className="text-[10px] font-semibold text-slate-300">Application</span>
+        </button>
+
+        {/* iOS Guide Modal */}
+        {showIOSGuide && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 animate-fadeIn">
+            <div className="w-full max-w-sm rounded-2xl bg-slate-900 border border-slate-700 p-6 shadow-2xl text-slate-100">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                <div className="flex items-center gap-2 text-red-500 font-bold">
+                  <Smartphone className="w-5 h-5" />
+                  <span>Installation sur iPhone / iPad</span>
+                </div>
+                <button
+                  onClick={() => setShowIOSGuide(false)}
+                  className="text-slate-400 hover:text-white p-1 rounded-lg"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="mt-4 space-y-3 text-sm text-slate-300">
+                <p>Pour installer l'application sur votre iPhone :</p>
+                <div className="bg-slate-800 p-3 rounded-xl border border-slate-700 font-medium text-white flex items-center gap-2">
+                  <Share2 className="w-4 h-4 text-red-400" />
+                  1. Touchez le bouton Partager en bas de Safari.
+                </div>
+                <div className="bg-slate-800 p-3 rounded-xl border border-slate-700 font-medium text-white flex items-center gap-2">
+                  <PlusSquare className="w-4 h-4 text-red-400" />
+                  2. Sélectionnez « Sur l'écran d'accueil ».
+                </div>
+                <p className="text-xs text-slate-400">
+                  L'application s'installera directement sur votre téléphone pour un accès direct et rapide.
+                </p>
+              </div>
+
+              <button
+                onClick={() => setShowIOSGuide(false)}
+                className="mt-5 w-full rounded-xl bg-red-600 py-2.5 text-sm font-bold text-white hover:bg-red-500 transition"
+              >
+                Compris, merci !
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Android Guide Modal */}
+        {showAndroidGuide && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 animate-fadeIn">
+            <div className="w-full max-w-sm rounded-2xl bg-slate-900 border border-slate-700 p-6 shadow-2xl text-slate-100">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                <div className="flex items-center gap-2 text-red-500 font-bold">
+                  <Smartphone className="w-5 h-5" />
+                  <span>Installer sur votre téléphone</span>
+                </div>
+                <button
+                  onClick={() => setShowAndroidGuide(false)}
+                  className="text-slate-400 hover:text-white p-1 rounded-lg"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="mt-4 space-y-3 text-sm text-slate-300">
+                <p>Dans votre navigateur Chrome / Edge :</p>
+                <div className="bg-slate-800 p-3 rounded-xl border border-slate-700 font-medium text-white flex items-center gap-2">
+                  <Download className="w-4 h-4 text-red-400" />
+                  Sélectionnez <strong>« Installer l'application »</strong> ou <strong>« Ajouter à l'écran d'accueil »</strong>.
+                </div>
+                <p className="text-xs text-slate-400">
+                  L'application s'ouvrira en plein écran sans barre d'adresse comme une application native.
+                </p>
+              </div>
+
+              <button
+                onClick={() => setShowAndroidGuide(false)}
+                className="mt-5 w-full rounded-xl bg-red-600 py-2.5 text-sm font-bold text-white hover:bg-red-500 transition"
+              >
+                Fermer
+              </button>
+            </div>
+          </div>
+        )}
+      </>
+    );
+  }
+
+  // If already installed for banner / header, hide
+  if (isInstalled) {
+    return null;
+  }
 
   if (variant === 'banner') {
     return (

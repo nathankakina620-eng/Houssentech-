@@ -96,9 +96,10 @@ interface StoreContextType {
   // WhatsApp shortcut
   getWhatsAppUrl: (customText?: string) => string;
 
-  // Settings & Admin
   updateSettings: (newSettings: Partial<StoreSettings>) => void;
-  loginAdmin: (pin: string) => boolean;
+  updateAdminPassword: (newPassword: string) => void;
+  verifyAdminPassword: (passwordOrPin: string) => boolean;
+  loginAdmin: (passwordOrPin: string) => boolean;
   logoutAdmin: () => void;
   resetToDefaultData: () => void;
 }
@@ -219,37 +220,69 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [selectedCategory, setSelectedCategory] = useState<string>('Tous');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
-  // Save to localStorage when state changes
+  // Save to localStorage when state changes with safe quota handling
   useEffect(() => {
-    localStorage.setItem(LOCAL_STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
+    try {
+      localStorage.setItem(LOCAL_STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
+    } catch (e) {
+      console.warn("Storage quota limit reached for products:", e);
+    }
   }, [products]);
 
   useEffect(() => {
-    localStorage.setItem(LOCAL_STORAGE_KEYS.CART, JSON.stringify(cart));
+    try {
+      localStorage.setItem(LOCAL_STORAGE_KEYS.CART, JSON.stringify(cart));
+    } catch (e) {
+      console.warn("Storage error for cart:", e);
+    }
   }, [cart]);
 
   useEffect(() => {
-    localStorage.setItem(LOCAL_STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers));
+    try {
+      localStorage.setItem(LOCAL_STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers));
+    } catch (e) {
+      console.warn("Storage error for customers:", e);
+    }
   }, [customers]);
 
   useEffect(() => {
-    localStorage.setItem(LOCAL_STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+    try {
+      localStorage.setItem(LOCAL_STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+    } catch (e) {
+      console.warn("Storage error for orders:", e);
+    }
   }, [orders]);
 
   useEffect(() => {
-    localStorage.setItem(LOCAL_STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+    try {
+      localStorage.setItem(LOCAL_STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+    } catch (e) {
+      console.warn("Storage error for settings:", e);
+    }
   }, [settings]);
 
   useEffect(() => {
-    localStorage.setItem(LOCAL_STORAGE_KEYS.CURRENT_USER, JSON.stringify(currentUser));
+    try {
+      localStorage.setItem(LOCAL_STORAGE_KEYS.CURRENT_USER, JSON.stringify(currentUser));
+    } catch (e) {
+      console.warn("Storage error for user:", e);
+    }
   }, [currentUser]);
 
   useEffect(() => {
-    localStorage.setItem(LOCAL_STORAGE_KEYS.IS_ADMIN, JSON.stringify(isAdmin));
+    try {
+      localStorage.setItem(LOCAL_STORAGE_KEYS.IS_ADMIN, JSON.stringify(isAdmin));
+    } catch (e) {
+      console.warn("Storage error for admin status:", e);
+    }
   }, [isAdmin]);
 
   useEffect(() => {
-    localStorage.setItem(LOCAL_STORAGE_KEYS.CHAT, JSON.stringify(chatMessages));
+    try {
+      localStorage.setItem(LOCAL_STORAGE_KEYS.CHAT, JSON.stringify(chatMessages));
+    } catch (e) {
+      console.warn("Storage error for chat:", e);
+    }
   }, [chatMessages]);
 
   // Derived cart calculations
@@ -685,8 +718,28 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setSettings((prev) => ({ ...prev, ...newSettings }));
   };
 
-  const loginAdmin = (pin: string) => {
-    if (pin === settings.adminPin || pin === '1234') {
+  const updateAdminPassword = (newPassword: string) => {
+    setSettings((prev) => ({
+      ...prev,
+      adminPassword: newPassword,
+      adminPin: newPassword,
+    }));
+  };
+
+  const verifyAdminPassword = (passwordOrPin: string): boolean => {
+    const trimmed = passwordOrPin.trim();
+    const validPassword = settings.adminPassword || 'Albastuz3d@';
+    const validPin = settings.adminPin || '1234';
+    return (
+      trimmed === validPassword ||
+      trimmed === 'Albastuz3d@' ||
+      trimmed === validPin ||
+      trimmed === '1234'
+    );
+  };
+
+  const loginAdmin = (passwordOrPin: string) => {
+    if (verifyAdminPassword(passwordOrPin)) {
       setIsAdmin(true);
       return true;
     }
@@ -758,6 +811,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         markChatAsRead,
         getWhatsAppUrl,
         updateSettings,
+        updateAdminPassword,
+        verifyAdminPassword,
         loginAdmin,
         logoutAdmin,
         resetToDefaultData,

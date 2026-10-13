@@ -9,6 +9,7 @@ import { CheckoutModal } from './components/CheckoutModal';
 import { RegisterModal } from './components/RegisterModal';
 import { LoginModal } from './components/LoginModal';
 import { AdminDashboard } from './components/Admin/AdminDashboard';
+import { AdminAuthModal } from './components/Admin/AdminAuthModal';
 import { InSiteChatModal } from './components/Chat/InSiteChatModal';
 import { OrderTrackingModal } from './components/Tracking/OrderTrackingModal';
 import { OrderReceiptModal } from './components/Receipt/OrderReceiptModal';
@@ -28,7 +29,8 @@ import {
   Phone,
   MessageCircle,
   Filter,
-  Package
+  Package,
+  Lock,
 } from 'lucide-react';
 
 const CATEGORIES: ('Tous' | ProductCategory)[] = [
@@ -63,6 +65,7 @@ function StoreContent() {
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
+  const [isAdminAuthOpen, setIsAdminAuthOpen] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isTrackingOpen, setIsTrackingOpen] = useState(false);
   const [receiptOrder, setReceiptOrder] = useState<Order | null>(null);
@@ -115,7 +118,6 @@ function StoreContent() {
         onOpenCart={() => setIsCartOpen(true)}
         onOpenLogin={() => setIsLoginOpen(true)}
         onOpenRegister={() => setIsRegisterOpen(true)}
-        onOpenAdmin={() => setIsAdminOpen(true)}
         onOpenChat={() => setIsChatOpen(true)}
         onOpenTracking={() => setIsTrackingOpen(true)}
         viewAngle={viewAngle}
@@ -384,24 +386,45 @@ function StoreContent() {
         )}
       </main>
 
-      {/* Footer */}
+      {/* Footer avec accès administrateur discret tout en bas de page (invisible aux clients ordinaires) */}
       <footer className="mt-12 bg-slate-900 dark:bg-slate-900 light:bg-white border-t border-slate-800 dark:border-slate-800 light:border-slate-200 py-6 text-xs text-slate-400">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-lg bg-red-600 flex items-center justify-center text-white font-bold text-xs">
-              H
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 space-y-4">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-lg bg-red-600 flex items-center justify-center text-white font-bold text-xs">
+                H
+              </div>
+              <span className="font-bold text-white dark:text-white light:text-slate-900">
+                {settings.companyName}
+              </span>
             </div>
-            <span className="font-bold text-white dark:text-white light:text-slate-900">
-              {settings.companyName}
-            </span>
+            <div className="text-center sm:text-right space-y-0.5 text-[11px]">
+              <p>
+                Numéro officiel & Inscriptions : <strong className="text-white dark:text-white light:text-slate-900 font-mono">{settings.companyPhone}</strong>
+              </p>
+              <p>
+                Règle d'acompte : 70% pour toute commande supérieure à 200$ • Expéditions chaque samedi matin
+              </p>
+            </div>
           </div>
-          <div className="text-center sm:text-right space-y-0.5 text-[11px]">
-            <p>
-              Numéro officiel & Inscriptions : <strong className="text-white dark:text-white light:text-slate-900 font-mono">{settings.companyPhone}</strong>
-            </p>
-            <p>
-              Règle d'acompte : 70% pour toute commande supérieure à 200$ • Expéditions chaque samedi matin
-            </p>
+
+          {/* Ligne discrète tout en bas de fil pour le gérant de la boutique */}
+          <div className="pt-4 border-t border-slate-800/80 dark:border-slate-800/80 flex flex-col sm:flex-row items-center justify-between text-[11px] text-slate-500 gap-2">
+            <p>© {new Date().getFullYear()} HOUSSETECH SARL. Tous droits réservés.</p>
+            <button
+              onClick={() => {
+                if (isAdmin) {
+                  setIsAdminOpen(true);
+                } else {
+                  setIsAdminAuthOpen(true);
+                }
+              }}
+              className="inline-flex items-center gap-1.5 text-slate-500 hover:text-slate-300 dark:hover:text-slate-300 transition text-[10px] opacity-60 hover:opacity-100"
+              title="Accès réservé exclusivement à la direction HOUSSETECH"
+            >
+              <Lock className="w-3 h-3 text-slate-600" />
+              <span>Espace sécurisé administration</span>
+            </button>
           </div>
         </div>
       </footer>
@@ -450,6 +473,17 @@ function StoreContent() {
         }}
       />
 
+      {/* Authentification Administrateur (Mot de passe Albastuz3d@ + 2FA Google nathankakina620@gmail.com) */}
+      <AdminAuthModal
+        isOpen={isAdminAuthOpen}
+        onClose={() => setIsAdminAuthOpen(false)}
+        onSuccess={() => {
+          setIsAdminAuthOpen(false);
+          setIsAdminOpen(true);
+        }}
+      />
+
+      {/* Panneau Administration HOUSSETECH */}
       {isAdminOpen && (
         <AdminDashboard onClose={() => setIsAdminOpen(false)} />
       )}
@@ -471,7 +505,7 @@ function StoreContent() {
         onClose={() => setIsReceiptOpen(false)}
       />
 
-      {/* Mobile Shell Bar */}
+      {/* Mobile Shell Bar avec Stock, Message, Application et Panier */}
       <MobileAppShell
         activeView="home"
         onNavigateHome={() => {
@@ -482,7 +516,6 @@ function StoreContent() {
         onOpenCart={() => setIsCartOpen(true)}
         onOpenChat={() => setIsChatOpen(true)}
         onOpenAccount={() => setIsLoginOpen(true)}
-        onOpenAdmin={() => setIsAdminOpen(true)}
         viewAngle={viewAngle}
         onSetAngle={setViewAngle}
       />

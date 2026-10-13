@@ -13,6 +13,8 @@ export const INITIAL_SETTINGS: StoreSettings = {
   depositPercentage: 70, // 70%
   currency: '$',
   adminPin: '1234',
+  adminPassword: 'Albastuz3d@', // Mot de passe officiel demandé par le gérant
+  adminAuthEmail: 'nathankakina620@gmail.com', // Compte Google de confirmation 2FA
   shippingScheduleNote: 'Expédition chaque samedi matin vers Kinshasa',
   freeDeliveryThreshold: 200, // Livraison GRATUITE dès 200$ d'achat !
   announcementText: '🚀 HOUSSETECH : Livraison 100% GRATUITE dès 200$ d\'achat ! Pièces en stock immédiat & pièces sur commande expédiées chaque samedi matin.',
