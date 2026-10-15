@@ -454,6 +454,31 @@ export const INITIAL_ORDERS: Order[] = [
 
 export const INITIAL_CHAT_MESSAGES: ChatMessage[] = [
   {
+    id: 'msg-welcome-cust-2',
+    customerId: 'cust-2',
+    customerName: 'David Mbemba',
+    customerPhone: '+243998112233',
+    sender: 'admin',
+    text: `🏢 BIENVENUE CHEZ HOUSSETECH — INFORMATIONS OFFICIELLES DE L'ENTREPRISE
+
+Bonjour David Mbemba, votre compte client a été créé avec succès ! Voici nos horaires officiels et nos modes de travail pour chacune de vos commandes :
+
+🕒 NOS HEURES DE TRAVAIL OFFICIELLES :
+• Lundi au Vendredi : 08h00 pile à 16h30
+• Samedi : 08h00 pile à 14h00
+• Dimanche : Fermé (Départ des convois d'expédition vers Kinshasa)
+
+📦 NOS MODES DE TRAVAIL POUR CHAQUE COMMANDE :
+1. Règle d'acompte : Acompte de 70% obligatoire pour toute commande supérieure à 200$, le solde restant (30%) est réglé à la livraison à Kinshasa.
+2. Expéditions convoi : Tous vos colis partent chaque samedi matin par convoi transitaire sécurisé vers Kinshasa.
+3. Validation officielle : Chaque article commandé est validé par l'administrateur (Articles acceptés vs Articles en attente).
+4. Suivi & Reçu : Suivi en temps réel de votre colis et reçu officiel PDF téléchargeable avec QR Code.
+
+📌 Ce message officiel reste fixé en premier position au sommet de nos échanges pour que vous puissiez toujours vous y référer.`,
+    createdAt: '2026-10-10 08:00',
+    read: true,
+  },
+  {
     id: 'msg-1',
     customerId: 'cust-2',
     customerName: 'David Mbemba',

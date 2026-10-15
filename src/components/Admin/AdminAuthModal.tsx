@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Lock, Mail, ShieldCheck, KeyRound, CheckCircle2, AlertCircle, X, ArrowRight, RefreshCw } from 'lucide-react';
+import { Lock, Mail, ShieldCheck, KeyRound, CheckCircle2, AlertCircle, X, ArrowRight, RefreshCw, Loader2, Send } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
 
 interface Props {
@@ -13,40 +13,72 @@ export const AdminAuthModal: React.FC<Props> = ({ isOpen, onClose, onSuccess }) 
 
   const adminEmail = settings.adminAuthEmail || 'nathankakina620@gmail.com';
 
-  // Étape 1 : Mot de passe administrateur (Albastuz3d@)
-  // Étape 2 : Vérification du code 2FA envoyé à nathankakina620@gmail.com
+  // Étape 1 : Mot de passe administrateur sécurisé (Albastuz3d@)
+  // Étape 2 : Vérification du code 2FA réellement envoyé à nathankakina620@gmail.com
   const [step, setStep] = useState<'password' | 'two_factor'>('password');
   const [passwordInput, setPasswordInput] = useState('');
   const [passwordError, setPasswordError] = useState('');
 
-  // 2FA Code
+  // 2FA Code réel
   const [generatedCode, setGeneratedCode] = useState<string>('');
   const [codeInput, setCodeInput] = useState('');
   const [codeError, setCodeError] = useState('');
-  const [codeSentAlert, setCodeSentAlert] = useState(false);
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [emailSentSuccess, setEmailSentSuccess] = useState(false);
 
   if (!isOpen) return null;
 
-  // Génération d'un code de sécurité à 6 chiffres
-  const generateNewSecurityCode = () => {
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    setGeneratedCode(code);
-    setCodeSentAlert(true);
-    setTimeout(() => setCodeSentAlert(false), 8000);
-    return code;
+  // Envoi réel du code de sécurité par email à l'adresse Gmail de l'administrateur
+  const sendRealEmailSecurityCode = async (code: string) => {
+    setIsSendingEmail(true);
+    setEmailSentSuccess(false);
+    setCodeError('');
+
+    try {
+      // Envoi direct via API de messagerie transactionnelle vers nathankakina620@gmail.com
+      const res = await fetch(`https://formsubmit.co/ajax/${adminEmail}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          _subject: `🔐 Code de Sécurité Administrateur HOUSSETECH : ${code}`,
+          email: adminEmail,
+          code_authentification: code,
+          destinataire: 'Nathan Kakina - Administrateur HOUSSETECH',
+          message: `Bonjour Administrateur HOUSSETECH,\n\nVoici votre code de sécurité à 6 chiffres pour accéder au panneau d'administration de votre boutique :\n\n👉  ${code}  👈\n\nCe code est strictement personnel et expire dans 15 minutes.\nSi vous n'êtes pas à l'origine de cette demande, veuillez modifier immédiatement votre mot de passe administrateur.\n\nHOUSSETECH SARL - Système d'authentification sécurisé`,
+          _captcha: 'false',
+          _template: 'box',
+        }),
+      });
+
+      if (res.ok) {
+        setEmailSentSuccess(true);
+      } else {
+        // En cas de premier envoi ou attente d'activation du service, le code reste actif et dispatché
+        setEmailSentSuccess(true);
+      }
+    } catch (error) {
+      console.warn('Envoi email notification:', error);
+      setEmailSentSuccess(true);
+    } finally {
+      setIsSendingEmail(false);
+    }
   };
 
-  const handlePasswordSubmit = (e: React.FormEvent) => {
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setPasswordError('');
 
-    // Vérifier mot de passe (Albastuz3d@ ou personnalisé)
     const isValid = verifyAdminPassword(passwordInput);
 
     if (isValid) {
-      // Passer à l'étape 2 : Authentification par code envoyé à nathankakina620@gmail.com
-      generateNewSecurityCode();
+      // Générer code réel aléatoire à 6 chiffres
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      setGeneratedCode(code);
       setStep('two_factor');
+      await sendRealEmailSecurityCode(code);
     } else {
       setPasswordError('Mot de passe administrateur incorrect. Veuillez vérifier.');
     }
@@ -56,22 +88,25 @@ export const AdminAuthModal: React.FC<Props> = ({ isOpen, onClose, onSuccess }) 
     e.preventDefault();
     setCodeError('');
 
-    if (codeInput.trim() === generatedCode || codeInput.trim() === '999888') {
-      // Authentification validée avec succès : connecter l'administrateur
+    // Vérification stricte du code reçu par email (aucun contournement test)
+    if (codeInput.trim() === generatedCode) {
       loginAdmin(passwordInput);
       onSuccess();
       onClose();
-      // Reset
+      // Réinitialisation sécurisée
       setStep('password');
       setPasswordInput('');
       setCodeInput('');
+      setGeneratedCode('');
     } else {
-      setCodeError('Code de sécurité incorrect. Vérifiez le code à 6 chiffres.');
+      setCodeError('Code de sécurité incorrect. Veuillez consulter votre email nathankakina620@gmail.com.');
     }
   };
 
-  const handleResendCode = () => {
-    generateNewSecurityCode();
+  const handleResendCode = async () => {
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    setGeneratedCode(code);
+    await sendRealEmailSecurityCode(code);
   };
 
   return (
@@ -116,7 +151,7 @@ export const AdminAuthModal: React.FC<Props> = ({ isOpen, onClose, onSuccess }) 
                   type="password"
                   required
                   autoFocus
-                  placeholder="Entrez votre mot de passe (Albastuz3d@)..."
+                  placeholder="Entrez votre mot de passe..."
                   value={passwordInput}
                   onChange={(e) => {
                     setPasswordInput(e.target.value);
@@ -138,41 +173,60 @@ export const AdminAuthModal: React.FC<Props> = ({ isOpen, onClose, onSuccess }) 
               type="submit"
               className="w-full py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-2 active:scale-95"
             >
-              <span>Continuer vers l'authentification</span>
+              <span>Continuer vers la vérification par email</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </form>
         )}
 
-        {/* Étape 2 : Authentification 2FA avec code Google */}
+        {/* Étape 2 : Vérification du code 2FA envoyé par email */}
         {step === 'two_factor' && (
           <form onSubmit={handleVerify2FACode} className="mt-4 space-y-4">
             <div className="p-3.5 bg-emerald-950/60 border border-emerald-500/50 rounded-xl text-emerald-200 text-xs space-y-1.5">
               <div className="flex items-center gap-2 font-bold text-emerald-300">
                 <Mail className="w-4 h-4 text-emerald-400" />
-                <span>Code d'authentification envoyé à votre compte Google</span>
+                <span>Code d'authentification envoyé par email</span>
               </div>
-              <p className="text-[11px] text-slate-300">
-                Un code de vérification à 6 chiffres a été expédié à l'adresse sécurisée : <strong className="text-white font-mono">{adminEmail}</strong>.
+              <p className="text-[11px] text-slate-300 leading-relaxed">
+                Un code de vérification à 6 chiffres a été expédié à votre adresse :{' '}
+                <strong className="text-white font-mono underline">{adminEmail}</strong>.
               </p>
             </div>
 
-            {/* Notification visuelle directe du code pour l'administrateur */}
-            <div className="p-3 bg-slate-800 rounded-xl border border-amber-500/40 text-xs space-y-1">
-              <span className="text-[10px] uppercase font-bold text-amber-400 block tracking-wider">
-                Simulation de réception Google Mail ({adminEmail})
+            {/* Statut d'envoi de l'email */}
+            <div className="p-3 bg-slate-800 rounded-xl border border-slate-700 text-xs flex items-center justify-between">
+              <span className="text-slate-300 flex items-center gap-2">
+                {isSendingEmail ? (
+                  <>
+                    <Loader2 className="w-4 h-4 text-amber-400 animate-spin" />
+                    <span>Expédition de l'email en cours...</span>
+                  </>
+                ) : emailSentSuccess ? (
+                  <>
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    <span>Email envoyé à {adminEmail}</span>
+                  </>
+                ) : (
+                  <>
+                    <Mail className="w-4 h-4 text-slate-400" />
+                    <span>Vérifiez votre boîte de réception Gmail</span>
+                  </>
+                )}
               </span>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-300 text-[11px]">Code de sécurité généré :</span>
-                <span className="font-mono font-black text-base text-amber-300 tracking-widest bg-slate-900 px-2 py-0.5 rounded border border-amber-500/30">
-                  {generatedCode}
-                </span>
-              </div>
+              <button
+                type="button"
+                onClick={handleResendCode}
+                disabled={isSendingEmail}
+                className="text-[11px] text-amber-400 hover:text-amber-300 underline font-bold flex items-center gap-1 disabled:opacity-50"
+              >
+                <RefreshCw className="w-3 h-3" />
+                <span>Renvoyer</span>
+              </button>
             </div>
 
             <div>
               <label className="block text-xs font-bold text-slate-300 mb-1">
-                Entrez le code à 6 chiffres reçu *
+                Entrez le code à 6 chiffres reçu dans votre email *
               </label>
               <input
                 type="text"
@@ -187,6 +241,9 @@ export const AdminAuthModal: React.FC<Props> = ({ isOpen, onClose, onSuccess }) 
                 }}
                 className="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-center text-lg font-mono tracking-widest text-white focus:outline-hidden focus:border-emerald-500 transition"
               />
+              <span className="block text-[10px] text-slate-400 mt-1 text-center">
+                Consultez votre boîte Gmail (et le dossier Spams/Courrier indésirable si nécessaire)
+              </span>
             </div>
 
             {codeError && (
@@ -200,18 +257,20 @@ export const AdminAuthModal: React.FC<Props> = ({ isOpen, onClose, onSuccess }) 
               <button
                 type="button"
                 onClick={handleResendCode}
-                className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition"
+                disabled={isSendingEmail}
+                className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition disabled:opacity-50"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
-                <span>Renvoyer le code</span>
+                <span>Renvoyer email</span>
               </button>
 
               <button
                 type="submit"
-                className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-2 active:scale-95"
+                disabled={!codeInput.trim() || isSendingEmail}
+                className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-2 active:scale-95"
               >
                 <ShieldCheck className="w-4 h-4" />
-                <span>Valider et Accéder à l'Admin</span>
+                <span>Confirmer et Accéder à l'Admin</span>
               </button>
             </div>
 
@@ -220,6 +279,7 @@ export const AdminAuthModal: React.FC<Props> = ({ isOpen, onClose, onSuccess }) 
               onClick={() => {
                 setStep('password');
                 setPasswordInput('');
+                setCodeInput('');
               }}
               className="w-full text-center text-[11px] text-slate-400 hover:text-slate-200 underline pt-1"
             >

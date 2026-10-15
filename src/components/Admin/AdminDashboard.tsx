@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   Wrench,
   Plus,
@@ -16,6 +16,7 @@ import {
   AlertTriangle,
   Upload,
   Image as ImageIcon,
+  ImagePlus,
   Save,
   LogOut,
   ExternalLink,
@@ -48,7 +49,11 @@ import {
 import { compressImageFile } from '../../utils/imageCompressor';
 import { useStore } from '../../context/StoreContext';
 import { Product, ProductCategory, Customer, OrderTrackingStep, StoreSettings, Order } from '../../types';
+import { EnterpriseWorkingHoursBanner } from '../Chat/EnterpriseWorkingHoursBanner';
 import { OrderReceiptModal } from '../Receipt/OrderReceiptModal';
+import { ChatImageLightbox } from '../Chat/ChatImageLightbox';
+import { ChatImageUploader } from '../Chat/ChatImageUploader';
+import { ChatMessageBubbleImages } from '../Chat/ChatMessageBubbleImages';
 
 // High quality motorcycle part presets organized by category
 const MOTORCYCLE_PHOTO_PRESETS = [
@@ -142,6 +147,9 @@ export const AdminDashboard: React.FC<{ onClose: () => void }> = ({ onClose }) =
     customers[0]?.id || 'guest-current'
   );
   const [adminReplyText, setAdminReplyText] = useState('');
+  const [adminChatImages, setAdminChatImages] = useState<string[]>([]);
+  const adminFileInputRef = useRef<HTMLInputElement>(null);
+  const [adminLightboxImage, setAdminLightboxImage] = useState<string | null>(null);
 
   // Screenshot modal preview
   const [previewScreenshotUrl, setPreviewScreenshotUrl] = useState<string | null>(null);
@@ -378,7 +386,7 @@ export const AdminDashboard: React.FC<{ onClose: () => void }> = ({ onClose }) =
 
   const handleSendAdminChatReply = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!adminReplyText.trim()) return;
+    if (!adminReplyText.trim() && adminChatImages.length === 0) return;
 
     const targetCustomer = customers.find((c) => c.id === selectedChatCustomerId);
     sendChatMessage(
@@ -386,9 +394,11 @@ export const AdminDashboard: React.FC<{ onClose: () => void }> = ({ onClose }) =
       selectedChatCustomerId,
       targetCustomer?.fullName || 'Client Moto',
       targetCustomer?.phone || '',
-      'admin'
+      'admin',
+      adminChatImages
     );
     setAdminReplyText('');
+    setAdminChatImages([]);
   };
 
   // Filtered products for stock tab
@@ -1142,6 +1152,9 @@ export const AdminDashboard: React.FC<{ onClose: () => void }> = ({ onClose }) =
                 </div>
               </div>
 
+              {/* Message officiel des horaires (Lun-Ven 8h-16h30, Sam 8h-14h) et modes de travail épinglé */}
+              <EnterpriseWorkingHoursBanner compact={true} />
+
               <div className="flex-1 p-4 overflow-y-auto space-y-3 bg-slate-950/70 text-xs">
                 {chatMessages
                   .filter((m) => m.customerId === selectedChatCustomerId)
@@ -1159,7 +1172,11 @@ export const AdminDashboard: React.FC<{ onClose: () => void }> = ({ onClose }) =
                               : 'bg-slate-800 text-slate-200 rounded-bl-xs border border-slate-700'
                           }`}
                         >
-                          <p className="leading-relaxed">{msg.text}</p>
+                          {msg.text && <p className="leading-relaxed whitespace-pre-line">{msg.text}</p>}
+                          <ChatMessageBubbleImages
+                            images={msg.images}
+                            onImageClick={(url) => setAdminLightboxImage(url)}
+                          />
                         </div>
                         <span className="text-[9px] text-slate-500 mt-0.5 font-mono">
                           {isFromAdmin ? 'Moi (Gérant) • ' : `${msg.customerName} • `}
@@ -1170,22 +1187,63 @@ export const AdminDashboard: React.FC<{ onClose: () => void }> = ({ onClose }) =
                   })}
               </div>
 
-              <form onSubmit={handleSendAdminChatReply} className="p-3 border-t border-slate-800 flex gap-2">
-                <input
-                  type="text"
-                  required
-                  placeholder="Répondre au client dans le site..."
-                  value={adminReplyText}
-                  onChange={(e) => setAdminReplyText(e.target.value)}
-                  className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white focus:outline-hidden focus:border-red-500"
+              <form onSubmit={handleSendAdminChatReply} className="p-3 border-t border-slate-800 space-y-2">
+                <ChatImageUploader
+                  images={adminChatImages}
+                  onImagesChange={setAdminChatImages}
                 />
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white font-bold text-xs rounded-xl transition flex items-center gap-1.5"
-                >
-                  <Send className="w-3.5 h-3.5" />
-                  <span>Envoyer</span>
-                </button>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => adminFileInputRef.current?.click()}
+                    className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl border border-slate-700 transition flex items-center gap-1.5 shrink-0 cursor-pointer"
+                    title="Joindre une ou plusieurs photos"
+                  >
+                    <ImagePlus className="w-4 h-4 text-red-500" />
+                    <span className="hidden sm:inline text-xs font-semibold">Photo</span>
+                  </button>
+
+                  <input
+                    ref={adminFileInputRef}
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    onChange={(e) => {
+                      const files = e.target.files;
+                      if (!files || files.length === 0) return;
+                      const promises = Array.from(files).map((f) => {
+                        return new Promise<string>((res) => {
+                          const r = new FileReader();
+                          r.onload = (ev) => res(ev.target?.result as string);
+                          r.readAsDataURL(f);
+                        });
+                      });
+                      Promise.all(promises).then((imgs) => {
+                        setAdminChatImages((prev) => [...prev, ...imgs]);
+                        if (adminFileInputRef.current) adminFileInputRef.current.value = '';
+                      });
+                    }}
+                    className="hidden"
+                  />
+
+                  <input
+                    type="text"
+                    placeholder="Répondre au client ou envoyer des photos..."
+                    value={adminReplyText}
+                    onChange={(e) => setAdminReplyText(e.target.value)}
+                    className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-400 focus:outline-hidden focus:border-red-500"
+                  />
+
+                  <button
+                    type="submit"
+                    disabled={!adminReplyText.trim() && adminChatImages.length === 0}
+                    className="px-4 py-2 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition flex items-center gap-1.5 shrink-0 cursor-pointer"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    <span>Envoyer</span>
+                  </button>
+                </div>
               </form>
             </div>
           </div>
@@ -1914,6 +1972,12 @@ export const AdminDashboard: React.FC<{ onClose: () => void }> = ({ onClose }) =
           onClose={() => setSelectedReceiptOrder(null)}
         />
       )}
+
+      {/* Lightbox photo plein écran */}
+      <ChatImageLightbox
+        imageUrl={adminLightboxImage}
+        onClose={() => setAdminLightboxImage(null)}
+      />
     </div>
   );
 };

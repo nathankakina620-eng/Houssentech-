@@ -131,6 +131,7 @@ export interface ChatMessage {
   customerPhone: string;
   sender: 'client' | 'admin';
   text: string;
+  images?: string[]; // Une ou plusieurs photos attachées au message
   createdAt: string;
   read: boolean;
 }

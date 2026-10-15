@@ -113,14 +113,14 @@ export const MobileAppShell: React.FC<Props> = ({
           <span className="text-[10px] font-semibold text-slate-300">Panier</span>
         </button>
 
-        {/* 6. SUIVI : COLIS & DEVIS */}
+        {/* 6. MON ANGLE : COLIS, ARTICLES & CHAT GÉRANT */}
         <button
           onClick={onOpenTracking}
           className="flex flex-col items-center justify-center gap-0.5 p-1 text-slate-400 hover:text-white transition"
-          title="Suivi de colis & Devis"
+          title="Mon Angle Client : Articles commandés, Suivi de colis & Conversation"
         >
-          <Truck className="w-4 h-4 text-slate-400" />
-          <span className="text-[10px] font-semibold">Suivi</span>
+          <Truck className="w-4 h-4 text-red-400" />
+          <span className="text-[10px] font-semibold text-slate-300">Mon Angle</span>
         </button>
       </nav>
     </>

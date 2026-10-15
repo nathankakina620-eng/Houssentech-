@@ -1,10 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MessageSquare, Send, X, ShieldCheck, User, MessageCircle, Phone, ExternalLink } from 'lucide-react';
+import { MessageSquare, Send, X, ShieldCheck, User, MessageCircle, Phone, ExternalLink, ImagePlus } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
+import { EnterpriseWorkingHoursBanner } from './EnterpriseWorkingHoursBanner';
+import { ChatImageLightbox } from './ChatImageLightbox';
+import { ChatImageUploader } from './ChatImageUploader';
+import { ChatMessageBubbleImages } from './ChatMessageBubbleImages';
 
 export const InSiteChatModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
   const { chatMessages, sendChatMessage, currentUser, settings, getWhatsAppUrl, markChatAsRead } = useStore();
   const [inputText, setInputText] = useState('');
+  const [images, setImages] = useState<string[]>([]);
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [guestName, setGuestName] = useState(currentUser?.fullName || '');
   const [guestPhone, setGuestPhone] = useState(currentUser?.phone || '');
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -30,16 +37,18 @@ export const InSiteChatModal: React.FC<{ isOpen: boolean; onClose: () => void }>
 
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputText.trim()) return;
+    if (!inputText.trim() && images.length === 0) return;
 
     sendChatMessage(
       inputText.trim(),
       activeCustId,
       currentUser?.fullName || guestName || 'Client Moto',
       currentUser?.phone || guestPhone || 'Non renseigné',
-      'client'
+      'client',
+      images
     );
     setInputText('');
+    setImages([]);
   };
 
   return (
@@ -90,6 +99,15 @@ export const InSiteChatModal: React.FC<{ isOpen: boolean; onClose: () => void }>
         </a>
       </div>
 
+      {/* MESSAGE ÉPINGLÉ AU-DESSUS DE TOUTES LES CONVERSATIONS : Heures de travail et Modes de commande */}
+      {currentUser ? (
+        <EnterpriseWorkingHoursBanner compact={true} />
+      ) : (
+        <div className="p-2.5 bg-amber-950/40 border-b border-amber-800/40 text-[10.5px] text-amber-200">
+          <span>🔒 Horaires officiels (Lun-Ven 8h-16h30, Sam 8h-14h) & modes de travail activés dès l'inscription.</span>
+        </div>
+      )}
+
       {/* Message history */}
       <div className="flex-1 p-3.5 overflow-y-auto space-y-2.5 bg-slate-950/70 text-xs min-h-[220px]">
         {conversation.length === 0 ? (
@@ -109,13 +127,17 @@ export const InSiteChatModal: React.FC<{ isOpen: boolean; onClose: () => void }>
                 className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}
               >
                 <div
-                  className={`max-w-[82%] p-2.5 rounded-2xl ${
+                  className={`max-w-[85%] p-2.5 rounded-2xl ${
                     isMe
                       ? 'bg-red-600 text-white rounded-br-xs'
                       : 'bg-slate-800 text-slate-200 rounded-bl-xs border border-slate-700'
                   }`}
                 >
-                  <p className="leading-relaxed">{msg.text}</p>
+                  {msg.text && <p className="leading-relaxed whitespace-pre-line">{msg.text}</p>}
+                  <ChatMessageBubbleImages
+                    images={msg.images}
+                    onImageClick={(url) => setLightboxImage(url)}
+                  />
                 </div>
                 <span className="text-[9px] text-slate-500 mt-0.5 px-1 font-mono">
                   {msg.sender === 'admin' ? 'Gérant • ' : 'Moi • '}
@@ -128,7 +150,7 @@ export const InSiteChatModal: React.FC<{ isOpen: boolean; onClose: () => void }>
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Form */}
+      {/* Input Form with Photo Upload */}
       <form onSubmit={handleSend} className="p-2.5 bg-slate-900 border-t border-slate-800 space-y-2">
         {!currentUser && !guestPhone && (
           <div className="grid grid-cols-2 gap-1.5 pb-1">
@@ -149,23 +171,68 @@ export const InSiteChatModal: React.FC<{ isOpen: boolean; onClose: () => void }>
           </div>
         )}
 
-        <div className="flex gap-1.5">
+        {/* Prévisualisation des photos sélectionnées */}
+        <ChatImageUploader
+          images={images}
+          onImagesChange={setImages}
+        />
+
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl border border-slate-700 transition shrink-0 cursor-pointer"
+            title="Joindre une ou plusieurs photos"
+          >
+            <ImagePlus className="w-4 h-4 text-red-500" />
+          </button>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept="image/*"
+            onChange={(e) => {
+              const files = e.target.files;
+              if (!files || files.length === 0) return;
+              const promises = Array.from(files).map((f) => {
+                return new Promise<string>((res) => {
+                  const r = new FileReader();
+                  r.onload = (ev) => res(ev.target?.result as string);
+                  r.readAsDataURL(f);
+                });
+              });
+              Promise.all(promises).then((imgs) => {
+                setImages((prev) => [...prev, ...imgs]);
+                if (fileInputRef.current) fileInputRef.current.value = '';
+              });
+            }}
+            className="hidden"
+          />
+
           <input
             type="text"
-            required
-            placeholder="Écrivez votre message au gérant..."
+            placeholder="Écrivez un message ou envoyez des photos..."
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-400 focus:outline-hidden focus:border-red-500"
           />
+
           <button
             type="submit"
-            className="p-2 bg-red-600 hover:bg-red-500 text-white rounded-xl shadow-md transition active:scale-95 shrink-0 flex items-center justify-center"
+            disabled={!inputText.trim() && images.length === 0}
+            className="p-2 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white rounded-xl shadow-md transition active:scale-95 shrink-0 flex items-center justify-center cursor-pointer"
           >
             <Send className="w-4 h-4" />
           </button>
         </div>
       </form>
+
+      {/* Lightbox photo plein écran */}
+      <ChatImageLightbox
+        imageUrl={lightboxImage}
+        onClose={() => setLightboxImage(null)}
+      />
     </div>
   );
 };

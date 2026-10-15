@@ -122,12 +122,16 @@ function StoreContent() {
         onOpenTracking={() => setIsTrackingOpen(true)}
         viewAngle={viewAngle}
         onSetAngle={setViewAngle}
+        onOpenAdmin={() => {
+          if (isAdmin) {
+            setIsAdminOpen(true);
+          } else {
+            setIsAdminAuthOpen(true);
+          }
+        }}
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-4 space-y-4">
-        {/* PWA Install Banner */}
-        <PWAInstallButton variant="banner" />
-
         {/* 70% Deposit Rule & Saturday Shipping Notice Banner */}
         <DepositNoticeBanner />
 
@@ -461,6 +465,10 @@ function StoreContent() {
         onSwitchToLogin={() => {
           setIsRegisterOpen(false);
           setIsLoginOpen(true);
+        }}
+        onOpenTracking={() => {
+          setIsRegisterOpen(false);
+          setIsTrackingOpen(true);
         }}
       />
 

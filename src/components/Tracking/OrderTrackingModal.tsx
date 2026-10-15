@@ -22,17 +22,24 @@ import {
   ShoppingBag,
   ArrowRight,
   User,
-  Sparkles,
   Lock,
+  ImagePlus,
+  Camera,
+  HelpCircle,
 } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
 import { Order, OrderTrackingStep, OrderRating } from '../../types';
+import { EnterpriseWorkingHoursBanner } from '../Chat/EnterpriseWorkingHoursBanner';
+import { ChatImageLightbox } from '../Chat/ChatImageLightbox';
+import { ChatImageUploader } from '../Chat/ChatImageUploader';
+import { ChatMessageBubbleImages } from '../Chat/ChatMessageBubbleImages';
+import { CustomerFAQSection } from './CustomerFAQSection';
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
   onOpenReceipt: (order: Order) => void;
-  initialTab?: 'orders' | 'tracking' | 'chat';
+  initialTab?: 'orders' | 'tracking' | 'chat' | 'faq';
 }
 
 export const OrderTrackingModal: React.FC<Props> = ({
@@ -52,13 +59,16 @@ export const OrderTrackingModal: React.FC<Props> = ({
     markChatAsRead,
   } = useStore();
 
-  const [activeTab, setActiveTab] = useState<'orders' | 'tracking' | 'chat'>(initialTab);
+  const [activeTab, setActiveTab] = useState<'orders' | 'tracking' | 'chat' | 'faq'>(initialTab);
   const [orderFilter, setOrderFilter] = useState<'all' | 'accepted' | 'pending'>('all');
   const [searchCode, setSearchCode] = useState('');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
   // Chat state
   const [chatInput, setChatInput] = useState('');
+  const [chatImages, setChatImages] = useState<string[]>([]);
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Rating state for arrived parcel
@@ -113,19 +123,21 @@ export const OrderTrackingModal: React.FC<Props> = ({
     }
   }, [activeTab, conversation.length, activeCustId, markChatAsRead]);
 
-  // Envoi d'un message au gérant
+  // Envoi d'un message avec ou sans photo au gérant
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!chatInput.trim()) return;
+    if (!chatInput.trim() && chatImages.length === 0) return;
 
     sendChatMessage(
       chatInput.trim(),
       activeCustId,
       customerDisplayName,
       customerDisplayPhone,
-      'client'
+      'client',
+      chatImages
     );
     setChatInput('');
+    setChatImages([]);
   };
 
   // Recherche de commande
@@ -281,18 +293,18 @@ export const OrderTrackingModal: React.FC<Props> = ({
           </button>
         </div>
 
-        {/* Barre de navigation interne entre les 3 aspects clés demandés */}
-        <div className="mt-3 flex items-center justify-between gap-1.5 bg-slate-950/80 p-1.5 rounded-2xl border border-slate-800 shrink-0">
+        {/* Barre de navigation interne de l'Espace Client avec FAQ Dynamique */}
+        <div className="mt-3 flex items-center justify-between gap-1.5 bg-slate-950/80 p-1.5 rounded-2xl border border-slate-800 shrink-0 overflow-x-auto">
           <button
             onClick={() => setActiveTab('orders')}
-            className={`flex-1 py-2 px-2.5 rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 ${
+            className={`flex-1 min-w-[120px] py-2 px-2 rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 ${
               activeTab === 'orders'
                 ? 'bg-red-600 text-white shadow-md shadow-red-600/30'
                 : 'text-slate-400 hover:text-white hover:bg-slate-900'
             }`}
           >
-            <Package className="w-4 h-4" />
-            <span className="truncate">Mes Articles & Commandes</span>
+            <Package className="w-3.5 h-3.5" />
+            <span className="truncate">Mes Articles</span>
             <span className="px-1.5 py-0.2 bg-white/20 rounded-full text-[10px] font-mono">
               {userOrders.length}
             </span>
@@ -300,29 +312,44 @@ export const OrderTrackingModal: React.FC<Props> = ({
 
           <button
             onClick={() => setActiveTab('tracking')}
-            className={`flex-1 py-2 px-2.5 rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 ${
+            className={`flex-1 min-w-[105px] py-2 px-2 rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 ${
               activeTab === 'tracking'
                 ? 'bg-red-600 text-white shadow-md shadow-red-600/30'
                 : 'text-slate-400 hover:text-white hover:bg-slate-900'
             }`}
           >
-            <Truck className="w-4 h-4" />
-            <span className="truncate">Suivi du Colis</span>
+            <Truck className="w-3.5 h-3.5" />
+            <span className="truncate">Suivi Colis</span>
           </button>
 
           <button
             onClick={() => setActiveTab('chat')}
-            className={`flex-1 py-2 px-2.5 rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 relative ${
+            className={`flex-1 min-w-[130px] py-2 px-2 rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 relative ${
               activeTab === 'chat'
                 ? 'bg-red-600 text-white shadow-md shadow-red-600/30'
                 : 'text-slate-400 hover:text-white hover:bg-slate-900'
             }`}
           >
-            <MessageSquare className="w-4 h-4" />
-            <span className="truncate">Notre Conversation Gérant</span>
+            <MessageSquare className="w-3.5 h-3.5" />
+            <span className="truncate">Conversation</span>
             {conversation.some((m) => m.sender === 'admin' && !m.read) && (
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             )}
+          </button>
+
+          <button
+            onClick={() => setActiveTab('faq')}
+            className={`flex-1 min-w-[145px] py-2 px-2 rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 ${
+              activeTab === 'faq'
+                ? 'bg-gradient-to-r from-red-600 to-rose-600 text-white shadow-md shadow-red-600/30'
+                : 'text-amber-400 hover:text-amber-300 hover:bg-slate-900'
+            }`}
+          >
+            <HelpCircle className="w-3.5 h-3.5" />
+            <span className="truncate">FAQ Délais & Paiements</span>
+            <span className="px-1.5 py-0.5 bg-amber-400/20 text-amber-300 rounded-md text-[9px] font-bold">
+              Auto
+            </span>
           </button>
         </div>
 
@@ -351,14 +378,67 @@ export const OrderTrackingModal: React.FC<Props> = ({
           {/* ================= ONGLET 1 : ARTICLES COMMANDÉS & STATUTS (ACCEPTÉ VS EN ATTENTE) ================= */}
           {activeTab === 'orders' && (
             <div className="space-y-4">
-              {/* Filtres par statuts d'acceptation demandés par le client */}
+              {/* Deux grandes cartes récapitulatives demandées par le gérant */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setOrderFilter('accepted')}
+                  className={`p-3.5 rounded-2xl border text-left transition flex items-start justify-between gap-3 ${
+                    orderFilter === 'accepted'
+                      ? 'bg-emerald-950/80 border-emerald-500 shadow-lg shadow-emerald-950/30 ring-2 ring-emerald-500/40'
+                      : 'bg-emerald-950/40 border-emerald-500/30 hover:bg-emerald-950/60'
+                  }`}
+                >
+                  <div className="space-y-1">
+                    <span className="text-[11px] font-black uppercase tracking-wider text-emerald-400 block">
+                      Articles Acceptés par l'Admin
+                    </span>
+                    <h3 className="text-xl font-black text-white">
+                      {acceptedOrdersList.length} <span className="text-xs font-semibold text-emerald-300">commande(s) validée(s)</span>
+                    </h3>
+                    <p className="text-[11px] text-slate-300">
+                      Reçu officiel PDF débloqué • Réservé au dépôt pour convoi transitaire samedi matin
+                    </p>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-emerald-600 text-white shrink-0 shadow-md">
+                    <CheckCircle2 className="w-5 h-5" />
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setOrderFilter('pending')}
+                  className={`p-3.5 rounded-2xl border text-left transition flex items-start justify-between gap-3 ${
+                    orderFilter === 'pending'
+                      ? 'bg-amber-950/80 border-amber-500 shadow-lg shadow-amber-950/30 ring-2 ring-amber-500/40'
+                      : 'bg-amber-950/40 border-amber-500/30 hover:bg-amber-950/60'
+                  }`}
+                >
+                  <div className="space-y-1">
+                    <span className="text-[11px] font-black uppercase tracking-wider text-amber-400 block">
+                      En attente d'acceptation chez l'Admin
+                    </span>
+                    <h3 className="text-xl font-black text-white">
+                      {pendingOrdersList.length} <span className="text-xs font-semibold text-amber-300">commande(s) en attente</span>
+                    </h3>
+                    <p className="text-[11px] text-slate-300">
+                      Vérification des pièces et acompte par l'administrateur • Notification dès accord
+                    </p>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-amber-500 text-slate-950 shrink-0 shadow-md font-bold">
+                    <Clock className="w-5 h-5" />
+                  </div>
+                </button>
+              </div>
+
+              {/* Filtres par statuts d'acceptation */}
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[11px] text-slate-400 font-bold">Filtrer par statut :</span>
+                <span className="text-[11px] text-slate-400 font-bold">Vue des articles :</span>
                 <button
                   onClick={() => setOrderFilter('all')}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
                     orderFilter === 'all'
-                      ? 'bg-slate-200 text-slate-900'
+                      ? 'bg-slate-200 text-slate-900 shadow'
                       : 'bg-slate-800 text-slate-400 hover:text-white'
                   }`}
                 >
@@ -367,7 +447,7 @@ export const OrderTrackingModal: React.FC<Props> = ({
 
                 <button
                   onClick={() => setOrderFilter('accepted')}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
                     orderFilter === 'accepted'
                       ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30'
                       : 'bg-emerald-950/40 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-950/70'
@@ -379,7 +459,7 @@ export const OrderTrackingModal: React.FC<Props> = ({
 
                 <button
                   onClick={() => setOrderFilter('pending')}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
                     orderFilter === 'pending'
                       ? 'bg-amber-600 text-white shadow-md shadow-amber-600/30'
                       : 'bg-amber-950/40 text-amber-400 border border-amber-500/30 hover:bg-amber-950/70'
@@ -434,7 +514,7 @@ export const OrderTrackingModal: React.FC<Props> = ({
                             {accepted ? (
                               <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-950/80 border border-emerald-500 text-emerald-300 text-xs font-black shadow-md">
                                 <CheckCircle2 className="w-4 h-4 text-emerald-400 animate-pulse" />
-                                <span>OFFICIELLEMENT ACCEPTÉE PAR LE GÉRANT</span>
+                                <span>OFFICIELLEMENT ACCEPTÉE PAR L'ADMINISTRATEUR</span>
                               </div>
                             ) : order.status === 'refusee' ? (
                               <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-950/80 border border-rose-500 text-rose-300 text-xs font-black">
@@ -781,7 +861,7 @@ export const OrderTrackingModal: React.FC<Props> = ({
 
           {/* ================= ONGLET 3 : NOTRE CONVERSATION ENTRE LUI ET MOI L'ADMINISTRATEUR ================= */}
           {activeTab === 'chat' && (
-            <div className="flex flex-col h-[420px] bg-slate-950/70 rounded-2xl border border-slate-800 overflow-hidden">
+            <div className="flex flex-col h-[520px] bg-slate-950/70 rounded-2xl border border-slate-800 overflow-hidden">
               {/* En-tête de conversation */}
               <div className="p-3 bg-slate-800/90 border-b border-slate-700 flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
@@ -790,7 +870,7 @@ export const OrderTrackingModal: React.FC<Props> = ({
                   </div>
                   <div>
                     <h4 className="font-bold text-xs text-white flex items-center gap-1.5">
-                      <span>Direction HOUSSETECH (Gérant)</span>
+                      <span>Direction HOUSSETECH (Administrateur)</span>
                       <span className="w-2 h-2 rounded-full bg-emerald-400" />
                     </h4>
                     <p className="text-[10px] text-slate-400">
@@ -800,7 +880,7 @@ export const OrderTrackingModal: React.FC<Props> = ({
                 </div>
 
                 <a
-                  href={getWhatsAppUrl(`Bonjour Gérant HOUSSETECH, je suis ${customerDisplayName} (${customerDisplayPhone}) et je vous écris depuis mon Angle Client...`)}
+                  href={getWhatsAppUrl(`Bonjour Administrateur HOUSSETECH, je suis ${customerDisplayName} (${customerDisplayPhone}) et je vous écris depuis mon Angle Client...`)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold rounded-xl shadow-xs flex items-center gap-1 transition"
@@ -811,6 +891,16 @@ export const OrderTrackingModal: React.FC<Props> = ({
                 </a>
               </div>
 
+              {/* MESSAGE PERMANENT ÉPINGLÉ EN PREMIÈRE POSITION AU-DESSUS DE TOUTES NOS CONVERSATIONS */}
+              {/* Visible dès l'inscription du client pour qu'il ait toujours recours à nos horaires (Lun-Ven 8h-16h30, Sam 8h-14h) et modes de travail */}
+              {currentUser ? (
+                <EnterpriseWorkingHoursBanner />
+              ) : (
+                <div className="p-2.5 bg-amber-950/40 border-b border-amber-800/40 text-[11px] text-amber-200 flex items-center justify-between">
+                  <span>🔒 Les horaires officiels (Lun-Ven 8h-16h30, Sam 8h-14h) et modes de travail sont activés dès votre inscription client.</span>
+                </div>
+              )}
+
               {/* Messages échangés */}
               <div className="flex-1 p-3.5 overflow-y-auto space-y-3 text-xs">
                 {conversation.length === 0 ? (
@@ -818,7 +908,7 @@ export const OrderTrackingModal: React.FC<Props> = ({
                     <MessageSquare className="w-8 h-8 text-slate-600" />
                     <p className="font-semibold text-slate-300">Aucun message pour le moment</p>
                     <p className="text-[11px] text-slate-500 max-w-sm">
-                      Dès qu'une commande est acceptée, le gérant vous envoie la notification ici. Vous pouvez aussi lui écrire directement ci-dessous.
+                      Dès qu'une commande est acceptée, l'administrateur vous envoie la notification ici. Vous pouvez aussi lui écrire directement ci-dessous.
                     </p>
                   </div>
                 ) : (
@@ -832,7 +922,7 @@ export const OrderTrackingModal: React.FC<Props> = ({
                       >
                         <div className="flex items-center gap-1.5 mb-0.5">
                           <span className="text-[10px] font-bold text-slate-400">
-                            {isAdminMsg ? '👑 Direction HOUSSETECH' : customerDisplayName}
+                            {isAdminMsg ? '👑 Administrateur HOUSSETECH' : customerDisplayName}
                           </span>
                           <span className="text-[9px] text-slate-500">{msg.createdAt}</span>
                         </div>
@@ -844,7 +934,11 @@ export const OrderTrackingModal: React.FC<Props> = ({
                               : 'bg-red-600 text-white rounded-tr-xs'
                           }`}
                         >
-                          <p className="whitespace-pre-line">{msg.text}</p>
+                          {msg.text && <p className="whitespace-pre-line">{msg.text}</p>}
+                          <ChatMessageBubbleImages
+                            images={msg.images}
+                            onImageClick={(url) => setLightboxImage(url)}
+                          />
                         </div>
                       </div>
                     );
@@ -853,28 +947,77 @@ export const OrderTrackingModal: React.FC<Props> = ({
                 <div ref={messagesEndRef} />
               </div>
 
-              {/* Formulaire d'envoi de message */}
-              <form onSubmit={handleSendMessage} className="p-2.5 bg-slate-900 border-t border-slate-800 flex gap-2">
-                <input
-                  type="text"
-                  placeholder="Écrivez votre message à l'administrateur..."
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white text-xs placeholder-slate-500 focus:outline-hidden focus:border-red-500"
+              {/* Formulaire d'envoi de message avec support d'une ou plusieurs photos */}
+              <form onSubmit={handleSendMessage} className="p-2.5 bg-slate-900 border-t border-slate-800 space-y-2">
+                {/* Prévisualisation des photos sélectionnées */}
+                <ChatImageUploader
+                  images={chatImages}
+                  onImagesChange={setChatImages}
                 />
-                <button
-                  type="submit"
-                  disabled={!chatInput.trim()}
-                  className="px-4 py-2 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center gap-1.5"
-                >
-                  <Send className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Envoyer</span>
-                </button>
+
+                <div className="flex items-center gap-2">
+                  {/* Bouton pour joindre des photos */}
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl border border-slate-700 transition flex items-center gap-1.5 shrink-0 cursor-pointer"
+                    title="Joindre une ou plusieurs photos"
+                  >
+                    <ImagePlus className="w-4 h-4 text-red-500" />
+                    <span className="hidden sm:inline text-[11px] font-semibold">Photo</span>
+                  </button>
+
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    onChange={(e) => {
+                      const files = e.target.files;
+                      if (!files || files.length === 0) return;
+                      const promises = Array.from(files).map((f) => {
+                        return new Promise<string>((res) => {
+                          const r = new FileReader();
+                          r.onload = (ev) => res(ev.target?.result as string);
+                          r.readAsDataURL(f);
+                        });
+                      });
+                      Promise.all(promises).then((imgs) => {
+                        setChatImages((prev) => [...prev, ...imgs]);
+                        if (fileInputRef.current) fileInputRef.current.value = '';
+                      });
+                    }}
+                    className="hidden"
+                  />
+
+                  <input
+                    type="text"
+                    placeholder="Écrivez votre message ou envoyez vos photos à l'administrateur..."
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white text-xs placeholder-slate-500 focus:outline-hidden focus:border-red-500"
+                  />
+
+                  <button
+                    type="submit"
+                    disabled={!chatInput.trim() && chatImages.length === 0}
+                    className="px-4 py-2 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center gap-1.5 cursor-pointer shrink-0"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Envoyer</span>
+                  </button>
+                </div>
               </form>
             </div>
           )}
         </div>
       </div>
+
+      {/* Lightbox plein écran pour agrandir les photos envoyées */}
+      <ChatImageLightbox
+        imageUrl={lightboxImage}
+        onClose={() => setLightboxImage(null)}
+      />
     </div>
   );
 };

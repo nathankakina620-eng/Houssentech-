@@ -7,9 +7,15 @@ interface Props {
   isOpen: boolean;
   onClose: () => void;
   onSwitchToLogin: () => void;
+  onOpenTracking?: () => void;
 }
 
-export const RegisterModal: React.FC<Props> = ({ isOpen, onClose, onSwitchToLogin }) => {
+export const RegisterModal: React.FC<Props> = ({
+  isOpen,
+  onClose,
+  onSwitchToLogin,
+  onOpenTracking,
+}) => {
   const { registerCustomer, settings, validateCustomer, setCurrentUser } = useStore();
 
   const [fullName, setFullName] = useState('');
@@ -27,9 +33,6 @@ export const RegisterModal: React.FC<Props> = ({ isOpen, onClose, onSwitchToLogi
   } | null>(null);
 
   const [copied, setCopied] = useState(false);
-  const [selfValidated, setSelfValidated] = useState(false);
-
-  if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,6 +42,8 @@ export const RegisterModal: React.FC<Props> = ({ isOpen, onClose, onSwitchToLogi
 
     const fullPhone = phoneNumber.startsWith('+') ? phoneNumber : `${phonePrefix}${phoneNumber.replace(/^0+/, '')}`;
     const result = registerCustomer(fullName.trim(), fullPhone, city.trim(), address.trim());
+    // Activer immédiatement l'utilisateur pour débloquer automatiquement son Angle Client
+    setCurrentUser(result.customer);
     setRegistrationResult(result);
   };
 
@@ -50,16 +55,7 @@ export const RegisterModal: React.FC<Props> = ({ isOpen, onClose, onSwitchToLogi
     }
   };
 
-  const handleQuickDemoValidation = () => {
-    if (registrationResult) {
-      validateCustomer(registrationResult.customer.id);
-      setCurrentUser({
-        ...registrationResult.customer,
-        status: 'valide',
-      });
-      setSelfValidated(true);
-    }
-  };
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
@@ -263,27 +259,40 @@ export const RegisterModal: React.FC<Props> = ({ isOpen, onClose, onSwitchToLogi
               </a>
             </div>
 
-            {/* Quick validation simulation for testing or admin */}
-            {!selfValidated ? (
-              <div className="p-3 bg-slate-800/40 rounded-xl border border-dashed border-slate-700 text-center space-y-2">
-                <p className="text-[11px] text-slate-400">
-                  <Sparkles className="w-3.5 h-3.5 inline text-amber-400 mr-1" />
-                  Vous testez l'application ? Vous pouvez valider immédiatement ce compte sans attendre ou aller dans l'espace administrateur :
-                </p>
+            {/* Déblocage automatique de l'Angle Client */}
+            <div className="p-3.5 bg-gradient-to-r from-red-600/20 via-rose-600/15 to-emerald-600/20 rounded-xl border border-red-500/30 text-xs space-y-2">
+              <div className="flex items-center gap-2 font-bold text-white">
+                <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>Votre Angle Client est automatiquement activé !</span>
+              </div>
+              <p className="text-[11px] text-slate-300 leading-relaxed">
+                Votre Angle Client personnel est désormais disponible du côté gauche dans le menu des <strong>trois traits (☰)</strong> pour consulter le suivi de vos colis vers Kinshasa, vos articles commandés et dialoguer en direct avec l'administrateur.
+              </p>
+              {onOpenTracking && (
                 <button
                   type="button"
-                  onClick={handleQuickDemoValidation}
-                  className="px-3 py-1.5 bg-red-600/20 hover:bg-red-600/30 border border-red-500/40 text-red-300 text-xs font-bold rounded-lg transition"
+                  onClick={() => {
+                    onClose();
+                    onOpenTracking();
+                  }}
+                  className="w-full mt-1 py-2 px-3 bg-red-600 hover:bg-red-500 text-white rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-md shadow-red-600/30"
                 >
-                  ⚡ Activer & Connecter directement ce compte client
+                  <span>Accéder directement à mon Angle Client</span>
+                  <CheckCircle className="w-3.5 h-3.5" />
                 </button>
+              )}
+            </div>
+
+            {/* Validation exclusive par l'administrateur HOUSSETECH */}
+            <div className="p-3.5 bg-slate-800/90 rounded-xl border border-slate-700 text-xs text-slate-300 space-y-1.5">
+              <div className="flex items-center gap-2 font-bold text-white">
+                <Clock className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>Validation sécurisée par l'Administrateur</span>
               </div>
-            ) : (
-              <div className="p-3 bg-emerald-950/40 border border-emerald-500/40 rounded-xl text-center text-xs text-emerald-300 flex items-center justify-center gap-2">
-                <CheckCircle className="w-4 h-4 text-emerald-400" />
-                <span>Compte validé avec succès ! Vous êtes connecté et prêt à commander.</span>
-              </div>
-            )}
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                Conformément aux directives de sécurité, votre inscription est transmise directement à la direction. Seul l'administrateur HOUSSETECH peut approuver et activer votre compte depuis son panneau de gestion. Vous recevrez une notification et pourrez ensuite vous connecter en saisissant votre numéro de téléphone.
+              </p>
+            </div>
 
             <button
               onClick={onClose}

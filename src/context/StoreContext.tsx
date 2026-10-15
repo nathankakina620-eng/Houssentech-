@@ -90,7 +90,14 @@ interface StoreContextType {
   submitOrderRating: (orderId: string, rating: OrderRating) => void;
 
   // In-site Chat
-  sendChatMessage: (text: string, customCustId?: string, customCustName?: string, customCustPhone?: string, sender?: 'client' | 'admin') => void;
+  sendChatMessage: (
+    text: string,
+    customCustId?: string,
+    customCustName?: string,
+    customCustPhone?: string,
+    sender?: 'client' | 'admin',
+    images?: string[]
+  ) => void;
   markChatAsRead: (customerId: string) => void;
 
   // WhatsApp shortcut
@@ -410,6 +417,35 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     setCustomers((prev) => [newCustomer, ...prev]);
 
+    // Message officiel de l'entreprise envoyé automatiquement au client dès l'ouverture de son compte (fixé en tête de conversation)
+    const officialWelcomeMsg: ChatMessage = {
+      id: `msg-welcome-${newCustomer.id}`,
+      customerId: newCustomer.id,
+      customerName: newCustomer.fullName,
+      customerPhone: newCustomer.phone,
+      sender: 'admin',
+      text: `🏢 BIENVENUE CHEZ HOUSSETECH — INFORMATIONS OFFICIELLES & MODES DE TRAVAIL
+
+Bonjour ${newCustomer.fullName}, votre compte client a été créé avec succès ! Voici nos horaires officiels et nos modes de travail pour chacune de vos commandes :
+
+🕒 NOS HEURES DE TRAVAIL OFFICIELLES :
+• Lundi au Vendredi : 08h00 pile à 16h30
+• Samedi : 08h00 pile à 14h00
+• Dimanche : Fermé (Départ des convois d'expédition vers Kinshasa)
+
+📦 NOS MODES DE TRAVAIL POUR CHAQUE COMMANDE :
+1. Règle d'acompte : Acompte de 70% obligatoire pour toute commande supérieure à 200$, le solde restant (30%) est réglé à la livraison à Kinshasa.
+2. Expéditions convoi : Tous vos colis partent chaque samedi matin par convoi transitaire sécurisé vers Kinshasa.
+3. Validation officielle : Chaque article commandé est validé par l'administrateur (Articles acceptés vs Articles en attente).
+4. Traçabilité & Reçu : Suivi en direct du colis étape par étape et reçu officiel PDF téléchargeable avec QR Code.
+
+📌 Ce message officiel reste fixé en premier position au sommet de nos échanges pour que vous puissiez toujours vous y référer pour voir nos heures et nos modes de travail.`,
+      createdAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
+      read: true,
+    };
+
+    setChatMessages((prev) => [...prev, officialWelcomeMsg]);
+
     const cleanCompanyPhone = cleanPhoneForLink(settings.companyPhone);
     const messageText = `🏍️ DEMANDE D'INSCRIPTION HOUSSETECH\nBonjour Gérant,\nJe souhaite valider mon inscription client sur votre site/application HOUSSETECH.\n\n👤 Nom : ${fullName}\n📱 Téléphone : ${phone}\n📍 Ville : ${city}\n🔑 Code Demande : ${validationCode}\n\nMerci de bien vouloir valider mon compte.`;
 
@@ -681,9 +717,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     customCustId?: string,
     customCustName?: string,
     customCustPhone?: string,
-    sender: 'client' | 'admin' = 'client'
+    sender: 'client' | 'admin' = 'client',
+    images?: string[]
   ) => {
-    if (!text.trim()) return;
+    const trimmedText = text ? text.trim() : '';
+    const hasImages = images && images.length > 0;
+    if (!trimmedText && !hasImages) return;
 
     const custId = customCustId || currentUser?.id || 'guest-cust';
     const custName = customCustName || currentUser?.fullName || 'Client Moto';
@@ -695,7 +734,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       customerName: custName,
       customerPhone: custPhone,
       sender,
-      text: text.trim(),
+      text: trimmedText,
+      images: hasImages ? images : undefined,
       createdAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
       read: false,
     };
