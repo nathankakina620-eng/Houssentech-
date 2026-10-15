@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { StoreProvider, useStore } from './context/StoreContext';
 import { Header } from './components/Header';
 import { DepositNoticeBanner } from './components/DepositNoticeBanner';
@@ -31,6 +31,8 @@ import {
   Filter,
   Package,
   Lock,
+  Bell,
+  X,
 } from 'lucide-react';
 
 const CATEGORIES: ('Tous' | ProductCategory)[] = [
@@ -55,7 +57,31 @@ function StoreContent() {
     settings,
     isAdmin,
     getWhatsAppUrl,
+    newCustomerToast,
+    dismissNewCustomerToast,
   } = useStore();
+
+  // Détection des liens partagés (?register=true, ?login=true, etc.)
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('register') === 'true' || params.get('join') === 'true' || params.get('inscription') === 'true') {
+        setIsRegisterOpen(true);
+      } else if (params.get('login') === 'true' || params.get('connexion') === 'true') {
+        setIsLoginOpen(true);
+      } else if (params.get('tracking') === 'true' || params.get('colis') === 'true') {
+        setIsTrackingOpen(true);
+      } else if (params.get('admin') === 'true') {
+        if (isAdmin) {
+          setIsAdminOpen(true);
+        } else {
+          setIsAdminAuthOpen(true);
+        }
+      }
+    } catch {
+      // Ignore URL parsing errors
+    }
+  }, [isAdmin]);
 
   // Modal states
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -68,6 +94,7 @@ function StoreContent() {
   const [isAdminAuthOpen, setIsAdminAuthOpen] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isTrackingOpen, setIsTrackingOpen] = useState(false);
+  const [trackingInitialTab, setTrackingInitialTab] = useState<'orders' | 'tracking' | 'chat' | 'faq'>('orders');
   const [receiptOrder, setReceiptOrder] = useState<Order | null>(null);
   const [isReceiptOpen, setIsReceiptOpen] = useState(false);
 
@@ -119,7 +146,10 @@ function StoreContent() {
         onOpenLogin={() => setIsLoginOpen(true)}
         onOpenRegister={() => setIsRegisterOpen(true)}
         onOpenChat={() => setIsChatOpen(true)}
-        onOpenTracking={() => setIsTrackingOpen(true)}
+        onOpenTracking={(tab) => {
+          setTrackingInitialTab(tab || 'orders');
+          setIsTrackingOpen(true);
+        }}
         viewAngle={viewAngle}
         onSetAngle={setViewAngle}
         onOpenAdmin={() => {
@@ -130,6 +160,59 @@ function StoreContent() {
           }
         }}
       />
+
+      {/* Alerte flottante en direct quand un nouveau client s'inscrit depuis son téléphone */}
+      {newCustomerToast && (
+        <div className="fixed top-20 right-4 left-4 sm:left-auto sm:w-96 z-50 bg-slate-900 border-2 border-amber-500/80 shadow-2xl rounded-2xl p-4 text-slate-100 animate-fadeIn flex flex-col gap-2.5">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-center gap-2.5">
+              <span className="p-2.5 rounded-xl bg-amber-500 text-slate-950 font-black shrink-0">
+                <Bell className="w-5 h-5 animate-pulse" />
+              </span>
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-wider text-amber-400 block">
+                  Nouveau Compte Client Reçu
+                </span>
+                <h4 className="text-sm font-bold text-white leading-tight">
+                  {newCustomerToast.customer.fullName}
+                </h4>
+                <p className="text-xs text-slate-400 font-mono">
+                  {newCustomerToast.customer.phone} • {newCustomerToast.customer.city}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={dismissNewCustomerToast}
+              className="text-slate-400 hover:text-white p-1 rounded-lg"
+              title="Fermer la notification"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2 pt-2 border-t border-slate-800">
+            <button
+              onClick={() => {
+                dismissNewCustomerToast();
+                if (isAdmin) {
+                  setIsAdminOpen(true);
+                } else {
+                  setIsAdminAuthOpen(true);
+                }
+              }}
+              className="flex-1 py-2 px-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl shadow-md transition text-center cursor-pointer active:scale-98"
+            >
+              Valider ce compte
+            </button>
+            <button
+              onClick={dismissNewCustomerToast}
+              className="py-2 px-3 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl transition cursor-pointer"
+            >
+              Ignorer
+            </button>
+          </div>
+        </div>
+      )}
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-4 space-y-4">
         {/* 70% Deposit Rule & Saturday Shipping Notice Banner */}
@@ -505,6 +588,7 @@ function StoreContent() {
         isOpen={isTrackingOpen}
         onClose={() => setIsTrackingOpen(false)}
         onOpenReceipt={handleOpenReceipt}
+        initialTab={trackingInitialTab}
       />
 
       <OrderReceiptModal

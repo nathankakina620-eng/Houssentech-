@@ -44,7 +44,9 @@ import {
   ArrowUpRight,
   TrendingUp,
   Info,
-  FileText
+  FileText,
+  Bell,
+  ArrowRight,
 } from 'lucide-react';
 import { compressImageFile } from '../../utils/imageCompressor';
 import { useStore } from '../../context/StoreContext';
@@ -424,10 +426,13 @@ export const AdminDashboard: React.FC<{ onClose: () => void }> = ({ onClose }) =
       p.sku.toLowerCase().includes(productSearch.toLowerCase())
   );
 
-  const pendingCustomers = customers.filter((c) => c.status === 'en_attente_validation');
+  const pendingCustomers = customers.filter(
+    (c) => c.status === 'en_attente_validation' || c.pendingVerification === true
+  );
   const filteredCustomers = customers.filter((c) => {
-    if (customerFilter === 'pending') return c.status === 'en_attente_validation';
-    if (customerFilter === 'validated') return c.status === 'valide';
+    const isPending = c.status === 'en_attente_validation' || c.pendingVerification === true;
+    if (customerFilter === 'pending') return isPending;
+    if (customerFilter === 'validated') return c.status === 'valide' && !c.pendingVerification;
     return true;
   });
 
@@ -571,6 +576,39 @@ export const AdminDashboard: React.FC<{ onClose: () => void }> = ({ onClose }) =
 
       {/* Main Content Area */}
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-950">
+        {/* Bannière d'alerte en direct : Inscriptions clients reçues sur la base de données */}
+        {pendingCustomers.length > 0 && (
+          <div className="mb-4 p-3.5 bg-gradient-to-r from-amber-950/90 via-amber-900/90 to-amber-950/90 border border-amber-500/60 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xl animate-fadeIn">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-amber-500 text-slate-950 rounded-xl font-bold shadow-md">
+                <Bell className="w-5 h-5 animate-pulse" />
+              </div>
+              <div>
+                <h4 className="text-xs sm:text-sm font-black text-white flex items-center gap-2">
+                  <span>🔔 {pendingCustomers.length} nouveau(x) client(s) inscrit(s) en direct !</span>
+                  <span className="px-2 py-0.5 bg-amber-400 text-slate-950 rounded-md text-[10px] font-black uppercase">
+                    À Valider
+                  </span>
+                </h4>
+                <p className="text-[11px] text-amber-200 mt-0.5">
+                  Dernière inscription : <strong>{pendingCustomers[0].fullName}</strong> ({pendingCustomers[0].phone}) • Ville : {pendingCustomers[0].city}
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => {
+                setActiveTab('customers');
+                setCustomerFilter('pending');
+              }}
+              className="px-4 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs rounded-xl shadow-md transition flex items-center gap-1.5 shrink-0 cursor-pointer active:scale-98"
+            >
+              <span>Valider les comptes ({pendingCustomers.length})</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
         {/* ================= TAB 1: DEDICATED STOCK TAB (ANGLE DU STOCK) ================= */}
         {activeTab === 'stocks' && (
           <div className="space-y-4 max-w-6xl mx-auto">
@@ -1293,7 +1331,7 @@ export const AdminDashboard: React.FC<{ onClose: () => void }> = ({ onClose }) =
 
             <div className="space-y-3">
               {filteredCustomers.map((cust) => {
-                const isPending = cust.status === 'en_attente_validation';
+                const isPending = cust.status === 'en_attente_validation' || cust.pendingVerification === true;
                 return (
                   <div
                     key={cust.id}

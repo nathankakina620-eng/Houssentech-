@@ -47,6 +47,7 @@ export interface Customer {
   address?: string;
   registeredAt: string;
   status: CustomerStatus;
+  pendingVerification?: boolean;
   validationCode: string;
   validatedAt?: string;
   notes?: string;

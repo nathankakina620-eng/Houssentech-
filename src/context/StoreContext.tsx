@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import {
   Product,
   CartItem,
@@ -19,6 +19,18 @@ import {
   INITIAL_CHAT_MESSAGES,
 } from '../data/initialData';
 import { computeShippingSchedule } from '../utils/shippingSchedule';
+import { api } from '../services/api';
+
+export interface ServerNotification {
+  id: string;
+  type: 'customer' | 'order' | 'chat';
+  title: string;
+  message: string;
+  createdAt: string;
+  read: boolean;
+  customerId?: string;
+  orderId?: string;
+}
 
 interface StoreContextType {
   products: Product[];
@@ -28,6 +40,7 @@ interface StoreContextType {
   settings: StoreSettings;
   currentUser: Customer | null;
   isAdmin: boolean;
+  refreshData: () => Promise<void>;
   theme: 'dark' | 'light';
   selectedCategory: string;
   searchQuery: string;
@@ -41,6 +54,14 @@ interface StoreContextType {
   cartRemainingBalance: number;
   chatMessages: ChatMessage[];
   unreadMessagesCount: number;
+
+  // Real-time server notifications & pending verification
+  notifications: ServerNotification[];
+  unreadNotificationsCount: number;
+  pendingVerificationCustomersCount: number;
+  markNotificationAsRead: (id?: string) => Promise<void>;
+  newCustomerToast: { customer: Customer; message: string } | null;
+  dismissNewCustomerToast: () => void;
 
   // Setters & Filters
   setSelectedCategory: (cat: string) => void;
@@ -292,6 +313,128 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, [chatMessages]);
 
+  // Real-time server notifications & audio alert
+  const [notifications, setNotifications] = useState<ServerNotification[]>([]);
+  const [newCustomerToast, setNewCustomerToast] = useState<{ customer: Customer; message: string } | null>(null);
+  const previousPendingIdsRef = useRef<Set<string>>(new Set());
+  const isFirstSyncRef = useRef<boolean>(true);
+
+  const playNotificationChime = () => {
+    try {
+      const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtxClass) return;
+      const audioCtx = new AudioCtxClass();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
+      osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.15); // A5
+      gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.4);
+    } catch {
+      // Audio autoplay policy handled silently
+    }
+  };
+
+  // Synchronisation continue et automatique avec la base de données centrale du serveur
+  // Permet à tous les téléphones (clients et administrateur) d'être synchronisés en temps réel
+  const syncWithServer = async () => {
+    try {
+      const data = await api.sync();
+      if (!data) return;
+
+      if (Array.isArray(data.customers)) {
+        // Normalisation stricte de pendingVerification
+        const normalizedCustomers: Customer[] = data.customers.map((c) => ({
+          ...c,
+          pendingVerification: c.status === 'en_attente_validation' ? true : false,
+        }));
+
+        setCustomers(normalizedCustomers);
+
+        // Détection instantanée des nouveaux comptes clients créés sur d'autres téléphones
+        const currentPending = normalizedCustomers.filter((c) => c.status === 'en_attente_validation' || c.pendingVerification);
+        const currentPendingIds = new Set(currentPending.map((c) => c.id));
+
+        if (!isFirstSyncRef.current) {
+          const newlyAddedPending = currentPending.find((c) => !previousPendingIdsRef.current.has(c.id));
+          if (newlyAddedPending) {
+            playNotificationChime();
+            setNewCustomerToast({
+              customer: newlyAddedPending,
+              message: `Nouveau compte client créé par ${newlyAddedPending.fullName} (${newlyAddedPending.phone}) ! En attente de validation officielle.`,
+            });
+          }
+        }
+        isFirstSyncRef.current = false;
+        previousPendingIdsRef.current = currentPendingIds;
+
+        // Si l'utilisateur actuel est connecté, mettre à jour son statut en direct (ex: validation admin)
+        if (currentUser) {
+          const fresh = normalizedCustomers.find(
+            (c) =>
+              c.id === currentUser.id ||
+              c.phone.replace(/[^0-9]/g, '') === currentUser.phone.replace(/[^0-9]/g, '')
+          );
+          if (fresh && (fresh.status !== currentUser.status || fresh.notes !== currentUser.notes)) {
+            setCurrentUser(fresh);
+          }
+        }
+      }
+
+      if (Array.isArray(data.orders)) {
+        setOrders(data.orders);
+      }
+
+      if (Array.isArray(data.chatMessages)) {
+        setChatMessages(data.chatMessages);
+      }
+
+      if (data.settings) {
+        setSettings(data.settings);
+      }
+
+      if (Array.isArray(data.products) && data.products.length > 0) {
+        setProducts(data.products);
+      }
+
+      if (Array.isArray(data.notifications)) {
+        setNotifications(data.notifications);
+      }
+    } catch (err) {
+      console.warn('[Sync with Server] Erreur:', err);
+    }
+  };
+
+  useEffect(() => {
+    // 1. Synchronisation immédiate à l'ouverture de l'application
+    syncWithServer();
+
+    // 2. Polling régulier toutes les 3 secondes pour notifier instantanément l'administrateur
+    const intervalId = setInterval(() => {
+      syncWithServer();
+    }, 3000);
+
+    // 3. Synchronisation quand l'utilisateur revient sur la page ou clique
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        syncWithServer();
+      }
+    };
+    window.addEventListener('focus', syncWithServer);
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      clearInterval(intervalId);
+      window.removeEventListener('focus', syncWithServer);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [currentUser?.id]);
+
   // Derived cart calculations
   const cartTotal = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
   const cartItemsCount = cart.reduce((sum, item) => sum + item.quantity, 0);
@@ -314,6 +457,28 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const unreadMessagesCount = chatMessages.filter((m) =>
     isAdmin ? m.sender === 'client' && !m.read : m.sender === 'admin' && !m.read
   ).length;
+
+  // Real-time server notifications & pending verification counts
+  const pendingVerificationCustomersCount = customers.filter(
+    (c) => c.status === 'en_attente_validation' || c.pendingVerification
+  ).length;
+
+  const unreadNotificationsCount = notifications.filter((n) => !n.read).length;
+
+  const markNotificationAsRead = async (id?: string) => {
+    try {
+      await api.markNotificationRead(id);
+      setNotifications((prev) =>
+        prev.map((n) => (!id || n.id === id ? { ...n, read: true } : n))
+      );
+    } catch (e) {
+      console.warn('Erreur markNotificationAsRead:', e);
+    }
+  };
+
+  const dismissNewCustomerToast = () => {
+    setNewCustomerToast(null);
+  };
 
   // Helper for cleaning phone number
   const cleanPhoneForLink = (phoneStr: string) => phoneStr.replace(/[^0-9]/g, '');
@@ -411,11 +576,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       address: address || '',
       registeredAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
       status: 'en_attente_validation',
+      pendingVerification: true,
       validationCode,
       notes: `Demande envoyée au numéro de l'entreprise ${settings.companyPhone}`,
     };
 
-    setCustomers((prev) => [newCustomer, ...prev]);
+    setCustomers((prev) => [newCustomer, ...prev.filter((c) => c.phone !== phone)]);
 
     // Message officiel de l'entreprise envoyé automatiquement au client dès l'ouverture de son compte (fixé en tête de conversation)
     const officialWelcomeMsg: ChatMessage = {
@@ -453,6 +619,25 @@ Bonjour ${newCustomer.fullName}, votre compte client a été créé avec succès
     const whatsappUrl = `https://wa.me/${cleanCompanyPhone}?text=${encodedMessage}`;
     const smsUrl = `sms:${settings.companyPhone}?body=${encodedMessage}`;
 
+    // Envoi immédiat au serveur central pour que l'Administrateur reçoive la notification en direct sur son téléphone ou PC
+    api.registerCustomer({
+      fullName,
+      phone,
+      city,
+      address,
+      validationCode,
+      notes: newCustomer.notes,
+    }).then((res) => {
+      if (res.success && res.customer) {
+        setCustomers((prev) => [
+          { ...res.customer!, pendingVerification: res.customer!.status === 'en_attente_validation' },
+          ...prev.filter((c) => c.id !== res.customer!.id && c.phone !== res.customer!.phone)
+        ]);
+      }
+    }).catch((err) => {
+      console.warn('Erreur envoi inscription au serveur:', err);
+    });
+
     return {
       customer: newCustomer,
       whatsappUrl,
@@ -468,6 +653,7 @@ Bonjour ${newCustomer.fullName}, votre compte client a été créé avec succès
           ? {
               ...c,
               status: 'valide',
+              pendingVerification: false,
               validatedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
             }
           : c
@@ -475,14 +661,27 @@ Bonjour ${newCustomer.fullName}, votre compte client a été créé avec succès
     );
 
     if (currentUser && currentUser.id === customerId) {
-      setCurrentUser((prev) => (prev ? { ...prev, status: 'valide' } : null));
+      setCurrentUser((prev) => (prev ? { ...prev, status: 'valide', pendingVerification: false } : null));
     }
+
+    if (newCustomerToast?.customer.id === customerId) {
+      setNewCustomerToast(null);
+    }
+
+    // Mise à jour sur le serveur central pour débloquer immédiatement le téléphone du client
+    api.updateCustomer(customerId, { status: 'valide' }).catch(console.warn);
   };
 
   const rejectCustomer = (customerId: string) => {
     setCustomers((prev) =>
-      prev.map((c) => (c.id === customerId ? { ...c, status: 'rejete' } : c))
+      prev.map((c) => (c.id === customerId ? { ...c, status: 'rejete', pendingVerification: false } : c))
     );
+
+    if (newCustomerToast?.customer.id === customerId) {
+      setNewCustomerToast(null);
+    }
+
+    api.updateCustomer(customerId, { status: 'rejete' }).catch(console.warn);
   };
 
   const deleteCustomer = (customerId: string) => {
@@ -490,6 +689,7 @@ Bonjour ${newCustomer.fullName}, votre compte client a été créé avec succès
     if (currentUser && currentUser.id === customerId) {
       setCurrentUser(null);
     }
+    api.deleteCustomer(customerId).catch(console.warn);
   };
 
   const loginWithPhone = (phoneInput: string): {
@@ -607,6 +807,9 @@ Bonjour ${newCustomer.fullName}, votre compte client a été créé avec succès
 
     setOrders((prev) => [newOrder, ...prev]);
 
+    // Envoi de la commande à la base de données centrale pour affichage immédiat chez l'administrateur
+    api.createOrder(newOrder).catch((err) => console.warn('Erreur envoi commande serveur:', err));
+
     cart.forEach((item) => {
       updateStock(item.product.id, Math.max(0, item.product.stock - item.quantity));
     });
@@ -652,6 +855,14 @@ Bonjour ${newCustomer.fullName}, votre compte client a été créé avec succès
       })
     );
 
+    // Synchronisation serveur
+    if (acceptedOrderObj) {
+      api.updateOrder(orderId, {
+        adminDecision: 'acceptee',
+        status: acceptedOrderObj.status,
+      }).catch(console.warn);
+    }
+
     // Notification directe sur le compte client dans l'application HOUSSETECH
     if (acceptedOrderObj) {
       const ord = acceptedOrderObj;
@@ -669,6 +880,7 @@ Bonjour ${newCustomer.fullName}, votre compte client a été créé avec succès
   };
 
   const rejectOrder = (orderId: string, reason?: string) => {
+    const finalReason = reason || 'Article indisponible ou acompte non conforme.';
     setOrders((prev) =>
       prev.map((o) =>
         o.id === orderId
@@ -676,17 +888,23 @@ Bonjour ${newCustomer.fullName}, votre compte client a été créé avec succès
               ...o,
               adminDecision: 'refusee',
               status: 'refusee',
-              adminDecisionReason: reason || 'Article indisponible ou acompte non conforme.',
+              adminDecisionReason: finalReason,
             }
           : o
       )
     );
+    api.updateOrder(orderId, {
+      adminDecision: 'refusee',
+      status: 'refusee',
+      adminDecisionReason: finalReason,
+    }).catch(console.warn);
   };
 
   const updateOrderTracking = (orderId: string, step: OrderTrackingStep) => {
     setOrders((prev) =>
       prev.map((o) => (o.id === orderId ? { ...o, status: step } : o))
     );
+    api.updateOrder(orderId, { status: step }).catch(console.warn);
   };
 
   const markDepositPaid = (orderId: string) => {
@@ -702,6 +920,11 @@ Bonjour ${newCustomer.fullName}, votre compte client a été créé avec succès
           : o
       )
     );
+    api.updateOrder(orderId, {
+      isDepositPaid: true,
+      depositPaidAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
+      status: 'acompte_recu',
+    }).catch(console.warn);
   };
 
   // Submit 3-dimensional 5-star rating (Speed, Quality, Delivery)
@@ -709,6 +932,7 @@ Bonjour ${newCustomer.fullName}, votre compte client a été créé avec succès
     setOrders((prev) =>
       prev.map((o) => (o.id === orderId ? { ...o, rating } : o))
     );
+    api.updateOrder(orderId, { rating }).catch(console.warn);
   };
 
   // In-site Chat System
@@ -741,6 +965,16 @@ Bonjour ${newCustomer.fullName}, votre compte client a été créé avec succès
     };
 
     setChatMessages((prev) => [...prev, newMsg]);
+
+    // Envoi au serveur central pour que l'autre partie (admin ou client sur son téléphone) reçoive le message et les photos
+    api.sendChatMessage({
+      customerId: custId,
+      customerName: custName,
+      customerPhone: custPhone,
+      sender,
+      text: trimmedText,
+      images: hasImages ? images : undefined,
+    }).catch((err) => console.warn('Erreur envoi message serveur:', err));
   };
 
   const markChatAsRead = (customerId: string) => {
@@ -751,11 +985,13 @@ Bonjour ${newCustomer.fullName}, votre compte client a été créé avec succès
           : m
       )
     );
+    api.markChatRead(customerId).catch(console.warn);
   };
 
   // Settings & Admin
   const updateSettings = (newSettings: Partial<StoreSettings>) => {
     setSettings((prev) => ({ ...prev, ...newSettings }));
+    api.updateSettings(newSettings).catch(console.warn);
   };
 
   const updateAdminPassword = (newPassword: string) => {
@@ -810,6 +1046,7 @@ Bonjour ${newCustomer.fullName}, votre compte client a été créé avec succès
         settings,
         currentUser,
         isAdmin,
+        refreshData: syncWithServer,
         theme,
         selectedCategory,
         searchQuery,
@@ -823,6 +1060,12 @@ Bonjour ${newCustomer.fullName}, votre compte client a été créé avec succès
         cartRemainingBalance,
         chatMessages,
         unreadMessagesCount,
+        notifications,
+        unreadNotificationsCount,
+        pendingVerificationCustomersCount,
+        markNotificationAsRead,
+        newCustomerToast,
+        dismissNewCustomerToast,
         setSelectedCategory,
         setSearchQuery,
         toggleTheme,

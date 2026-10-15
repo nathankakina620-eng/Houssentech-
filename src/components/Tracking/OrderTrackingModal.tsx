@@ -1010,6 +1010,19 @@ export const OrderTrackingModal: React.FC<Props> = ({
               </form>
             </div>
           )}
+
+          {/* ================= ONGLET 4 : FAQ DYNAMIQUE (DÉLAIS DE LIVRAISON & MODALITÉS DE PAIEMENT) ================= */}
+          {activeTab === 'faq' && (
+            <CustomerFAQSection
+              onGoToChat={(prefill) => {
+                if (prefill) {
+                  setChatInput(prefill);
+                }
+                setActiveTab('chat');
+              }}
+              onGoToTracking={() => setActiveTab('tracking')}
+            />
+          )}
         </div>
       </div>
 
