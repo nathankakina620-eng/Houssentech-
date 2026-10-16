@@ -13,6 +13,7 @@ import { AdminAuthModal } from './components/Admin/AdminAuthModal';
 import { InSiteChatModal } from './components/Chat/InSiteChatModal';
 import { OrderTrackingModal } from './components/Tracking/OrderTrackingModal';
 import { OrderReceiptModal } from './components/Receipt/OrderReceiptModal';
+import { CustomerProfileModal } from './components/CustomerProfileModal';
 import { MobileAppShell } from './components/MobileAppShell';
 import { OfflineIndicator } from './components/PWA/OfflineIndicator';
 import { PWAInstallButton } from './components/PWA/PWAInstallButton';
@@ -97,6 +98,7 @@ function StoreContent() {
   const [trackingInitialTab, setTrackingInitialTab] = useState<'orders' | 'tracking' | 'chat' | 'faq'>('orders');
   const [receiptOrder, setReceiptOrder] = useState<Order | null>(null);
   const [isReceiptOpen, setIsReceiptOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
 
   // Dedicated angle filter state: 'all' | 'stock' | 'order'
   const [viewAngle, setViewAngle] = useState<'all' | 'stock' | 'order'>('all');
@@ -147,9 +149,14 @@ function StoreContent() {
         onOpenRegister={() => setIsRegisterOpen(true)}
         onOpenChat={() => setIsChatOpen(true)}
         onOpenTracking={(tab) => {
-          setTrackingInitialTab(tab || 'orders');
-          setIsTrackingOpen(true);
+          if (tab === 'profile') {
+            setIsProfileOpen(true);
+          } else {
+            setTrackingInitialTab(tab || 'orders');
+            setIsTrackingOpen(true);
+          }
         }}
+        onOpenProfile={() => setIsProfileOpen(true)}
         viewAngle={viewAngle}
         onSetAngle={setViewAngle}
         onOpenAdmin={() => {
@@ -161,8 +168,8 @@ function StoreContent() {
         }}
       />
 
-      {/* Alerte flottante en direct quand un nouveau client s'inscrit depuis son téléphone */}
-      {newCustomerToast && (
+      {/* Notification administrative en direct : Visible UNIQUEMENT quand l'administrateur est connecté */}
+      {isAdmin && newCustomerToast && (
         <div className="fixed top-20 right-4 left-4 sm:left-auto sm:w-96 z-50 bg-slate-900 border-2 border-amber-500/80 shadow-2xl rounded-2xl p-4 text-slate-100 animate-fadeIn flex flex-col gap-2.5">
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-center gap-2.5">
@@ -171,7 +178,7 @@ function StoreContent() {
               </span>
               <div>
                 <span className="text-[10px] font-black uppercase tracking-wider text-amber-400 block">
-                  Nouveau Compte Client Reçu
+                  👑 Direction — Nouveau Client Inscrit
                 </span>
                 <h4 className="text-sm font-bold text-white leading-tight">
                   {newCustomerToast.customer.fullName}
@@ -194,15 +201,11 @@ function StoreContent() {
             <button
               onClick={() => {
                 dismissNewCustomerToast();
-                if (isAdmin) {
-                  setIsAdminOpen(true);
-                } else {
-                  setIsAdminAuthOpen(true);
-                }
+                setIsAdminOpen(true);
               }}
               className="flex-1 py-2 px-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl shadow-md transition text-center cursor-pointer active:scale-98"
             >
-              Valider ce compte
+              Voir le compte client
             </button>
             <button
               onClick={dismissNewCustomerToast}
@@ -553,6 +556,10 @@ function StoreContent() {
           setIsRegisterOpen(false);
           setIsTrackingOpen(true);
         }}
+        onOpenChat={() => {
+          setIsRegisterOpen(false);
+          setIsChatOpen(true);
+        }}
       />
 
       <LoginModal
@@ -595,6 +602,11 @@ function StoreContent() {
         order={receiptOrder}
         isOpen={isReceiptOpen}
         onClose={() => setIsReceiptOpen(false)}
+      />
+
+      <CustomerProfileModal
+        isOpen={isProfileOpen}
+        onClose={() => setIsProfileOpen(false)}
       />
 
       {/* Mobile Shell Bar avec Stock, Message, Application et Panier */}

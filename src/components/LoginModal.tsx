@@ -9,7 +9,7 @@ interface Props {
 }
 
 export const LoginModal: React.FC<Props> = ({ isOpen, onClose, onSwitchToRegister }) => {
-  const { loginWithPhone, settings } = useStore();
+  const { loginWithPhone, settings, isAdmin, logoutAdmin } = useStore();
   const [phoneNumber, setPhoneNumber] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [pendingCustomer, setPendingCustomer] = useState<any | null>(null);
@@ -20,6 +20,11 @@ export const LoginModal: React.FC<Props> = ({ isOpen, onClose, onSwitchToRegiste
     e.preventDefault();
     setErrorMsg('');
     setPendingCustomer(null);
+
+    if (isAdmin) {
+      setErrorMsg("Une session Administrateur est active dans cette fenêtre. Veuillez d'abord vous déconnecter de l'administration pour ouvrir un compte client.");
+      return;
+    }
 
     if (!phoneNumber.trim()) {
       setErrorMsg('Veuillez entrer votre numéro de téléphone.');
@@ -57,6 +62,31 @@ export const LoginModal: React.FC<Props> = ({ isOpen, onClose, onSwitchToRegiste
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {isAdmin ? (
+          <div className="mt-5 space-y-4">
+            <div className="p-4 rounded-xl bg-red-950/50 border border-red-700/60 text-red-200 text-xs space-y-2">
+              <div className="flex items-center gap-2 font-bold text-white text-sm">
+                <span>👑 Session Administrateur Active</span>
+              </div>
+              <p>
+                Vous êtes actuellement connecté au compte Administrateur HOUSSETECH. Un client ne peut pas ouvrir son compte simultanément dans le même angle.
+              </p>
+              <p className="text-[11px] text-slate-300">
+                Veuillez vous déconnecter de l'administration pour vous connecter à votre compte client.
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                logoutAdmin();
+                setErrorMsg('');
+              }}
+              className="w-full py-2.5 px-4 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-2"
+            >
+              <span>Se déconnecter de l'administration</span>
+            </button>
+          </div>
+        ) : (
 
         <form onSubmit={handleSubmit} className="mt-5 space-y-4">
           <div>
@@ -126,6 +156,7 @@ export const LoginModal: React.FC<Props> = ({ isOpen, onClose, onSwitchToRegiste
             </button>
           </div>
         </form>
+        )}
       </div>
     </div>
   );

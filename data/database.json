@@ -7,9 +7,12 @@
       "city": "Kinshasa (Bandal)",
       "address": "Av. Kasa-Vubu 120",
       "registeredAt": "2026-10-15 11:25",
-      "status": "en_attente_validation",
+      "status": "valide",
       "validationCode": "VAL-5791",
-      "notes": "Demande envoyée au numéro de l'entreprise +243900042404"
+      "notes": "Demande envoyée au numéro de l'entreprise +243900042404",
+      "isBlocked": false,
+      "pendingVerification": false,
+      "validatedAt": "2026-10-15 11:30"
     },
     {
       "id": "cust-1792063011743",
@@ -18,9 +21,12 @@
       "city": "Kinshasa",
       "address": "",
       "registeredAt": "2026-10-15 11:16",
-      "status": "en_attente_validation",
+      "status": "valide",
       "validationCode": "VAL-1489",
-      "notes": "Demande envoyée au numéro de l'entreprise +243900042404"
+      "notes": "Demande envoyée au numéro de l'entreprise +243900042404",
+      "isBlocked": false,
+      "pendingVerification": false,
+      "validatedAt": "2026-10-15 11:30"
     },
     {
       "id": "cust-1",
@@ -29,9 +35,12 @@
       "city": "Kinshasa (Gombe)",
       "address": "Av. Justice N°14",
       "registeredAt": "2026-10-10 14:20",
-      "status": "en_attente_validation",
+      "status": "valide",
       "validationCode": "VAL-7821",
-      "notes": "Demande envoyée au numéro de l'entreprise +243900042404"
+      "notes": "Demande envoyée au numéro de l'entreprise +243900042404",
+      "isBlocked": false,
+      "pendingVerification": false,
+      "validatedAt": "2026-10-15 11:30"
     },
     {
       "id": "cust-2",
@@ -43,7 +52,9 @@
       "status": "valide",
       "validationCode": "VAL-4419",
       "validatedAt": "2026-10-09 11:30",
-      "notes": "Compte validé par le gérant HOUSSETECH"
+      "notes": "Compte validé par le gérant HOUSSETECH",
+      "isBlocked": false,
+      "pendingVerification": false
     }
   ],
   "orders": [

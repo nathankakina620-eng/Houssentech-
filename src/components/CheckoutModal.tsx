@@ -89,8 +89,14 @@ export const CheckoutModal: React.FC<Props> = ({
     }
   };
 
+  const isBlocked = currentUser?.status === 'bloque' || currentUser?.isBlocked;
+
   const handleOrderSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isBlocked) {
+      alert("Votre compte client a été suspendu par l'administration. Veuillez contacter le support.");
+      return;
+    }
     if (!customerName.trim() || !customerPhone.trim() || !city.trim() || !deliveryAddress.trim()) {
       alert('Veuillez remplir tous les champs obligatoires.');
       return;
@@ -385,11 +391,22 @@ export const CheckoutModal: React.FC<Props> = ({
               />
             </div>
 
+            {/* Compte bloqué alert */}
+            {isBlocked && (
+              <div className="p-3 bg-red-950/70 border border-red-700/60 rounded-xl text-xs text-red-200 flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-red-400 shrink-0" />
+                <div>
+                  <strong>Compte client suspendu :</strong> Votre compte a été temporairement bloqué par l'administration. La validation de commande est désactivée.
+                </div>
+              </div>
+            )}
+
             {/* Submit */}
             <div className="pt-2">
               <button
                 type="submit"
-                className="w-full py-3.5 bg-red-600 hover:bg-red-500 active:scale-[0.99] font-bold text-sm text-white rounded-xl shadow-lg shadow-red-600/30 transition flex items-center justify-center gap-2"
+                disabled={isBlocked}
+                className="w-full py-3.5 bg-red-600 hover:bg-red-500 disabled:opacity-50 active:scale-[0.99] font-bold text-sm text-white rounded-xl shadow-lg shadow-red-600/30 transition flex items-center justify-center gap-2 cursor-pointer"
               >
                 <span>Confirmer ma Commande (${grandTotal.toFixed(2)})</span>
                 <ChevronRight className="w-4 h-4" />

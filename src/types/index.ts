@@ -37,7 +37,16 @@ export interface CartItem {
   quantity: number;
 }
 
-export type CustomerStatus = 'en_attente_validation' | 'valide' | 'rejete';
+export type CustomerStatus = 'valide' | 'bloque' | 'en_attente_validation' | 'rejete';
+
+export interface CustomerLocation {
+  latitude: number;
+  longitude: number;
+  address?: string;
+  commune?: string;
+  landmark?: string;
+  updatedAt?: string;
+}
 
 export interface Customer {
   id: string;
@@ -45,9 +54,14 @@ export interface Customer {
   phone: string;
   city: string;
   address?: string;
+  avatar?: string;
+  location?: CustomerLocation;
   registeredAt: string;
   status: CustomerStatus;
   pendingVerification?: boolean;
+  isBlocked?: boolean;
+  blockedAt?: string;
+  blockedReason?: string;
   validationCode: string;
   validatedAt?: string;
   notes?: string;

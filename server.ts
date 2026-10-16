@@ -134,7 +134,9 @@ async function startServer() {
     res.json({
       customers: db.customers.map((c) => ({
         ...c,
-        pendingVerification: c.status === 'en_attente_validation' ? true : false,
+        status: c.status === 'bloque' || c.isBlocked ? 'bloque' : 'valide',
+        isBlocked: c.status === 'bloque' || Boolean(c.isBlocked),
+        pendingVerification: false,
       })),
       orders: db.orders,
       chatMessages: db.chatMessages,
@@ -150,7 +152,9 @@ async function startServer() {
     res.json(
       db.customers.map((c) => ({
         ...c,
-        pendingVerification: c.status === 'en_attente_validation' ? true : false,
+        status: c.status === 'bloque' || c.isBlocked ? 'bloque' : 'valide',
+        isBlocked: c.status === 'bloque' || Boolean(c.isBlocked),
+        pendingVerification: false,
       }))
     );
   });
@@ -175,20 +179,23 @@ async function startServer() {
     if (existingIndex >= 0) {
       // Mettre à jour les informations du client existant
       const existing = db.customers[existingIndex];
-      const isAlreadyValid = existing.status === 'valide';
+      const isBlocked = existing.status === 'bloque' || existing.isBlocked;
       customerToReturn = {
         ...existing,
         fullName: fullName || existing.fullName,
         city: city || existing.city,
         address: address || existing.address,
+        avatar: req.body.avatar || existing.avatar,
+        location: req.body.location || existing.location,
         validationCode: validationCode || existing.validationCode,
         notes: notes || existing.notes,
-        status: isAlreadyValid ? 'valide' : 'en_attente_validation',
-        pendingVerification: isAlreadyValid ? false : true,
+        status: isBlocked ? 'bloque' : 'valide',
+        isBlocked: Boolean(isBlocked),
+        pendingVerification: false,
       };
       db.customers[existingIndex] = customerToReturn;
     } else {
-      // Création d'un nouveau compte client
+      // Création d'un nouveau compte client ACTIVÉ DIRECTEMENT (Pas d'attente de validation requise)
       const newCustId = `cust-${Date.now()}`;
       customerToReturn = {
         id: newCustId,
@@ -196,11 +203,15 @@ async function startServer() {
         phone: phone.trim(),
         city: city?.trim() || 'Kinshasa',
         address: address?.trim() || '',
+        avatar: req.body.avatar || undefined,
+        location: req.body.location || undefined,
         registeredAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
-        status: 'en_attente_validation',
-        pendingVerification: true,
+        status: 'valide', // Validé directement sans attente
+        pendingVerification: false,
+        isBlocked: false,
+        validatedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
         validationCode: validationCode || `VAL-${Math.floor(1000 + Math.random() * 9000)}`,
-        notes: notes || `Demande envoyée au numéro de l'entreprise ${db.settings.companyPhone}`,
+        notes: notes || `Compte actif créé directement. Possibilité de blocage ou suppression par l'administration.`,
       };
 
       db.customers.unshift(customerToReturn);
@@ -214,7 +225,7 @@ async function startServer() {
         sender: 'admin',
         text: `🏢 BIENVENUE CHEZ HOUSSETECH — INFORMATIONS OFFICIELLES & MODES DE TRAVAIL
 
-Bonjour ${customerToReturn.fullName}, votre compte client a été créé avec succès ! Voici nos horaires officiels et nos modes de travail pour chacune de vos commandes :
+Bonjour ${customerToReturn.fullName}, votre compte client a été créé et activé avec succès ! Voici nos horaires officiels et nos modes de travail pour chacune de vos commandes :
 
 🕒 NOS HEURES DE TRAVAIL OFFICIELLES :
 • Lundi au Vendredi : 08h00 pile à 16h30
@@ -222,12 +233,11 @@ Bonjour ${customerToReturn.fullName}, votre compte client a été créé avec su
 • Dimanche : Fermé (Départ des convois d'expédition vers Kinshasa)
 
 📦 NOS MODES DE TRAVAIL POUR CHAQUE COMMANDE :
-1. Règle d'acompte : Acompte de 70% obligatoire pour toute commande supérieure à 200$, le solde restant (30%) est réglé à la livraison à Kinshasa.
+1. Acompte & Paiement : Acompte de 70% obligatoire pour les commandes supérieures à 200$, solde réglé à la livraison à Kinshasa.
 2. Expéditions convoi : Tous vos colis partent chaque samedi matin par convoi transitaire sécurisé vers Kinshasa.
-3. Validation officielle : Chaque article commandé est validé par l'administrateur (Articles acceptés vs Articles en attente).
-4. Traçabilité & Reçu : Suivi en direct du colis étape par étape et reçu officiel PDF téléchargeable avec QR Code.
+3. Messagerie & Suivi : Vous pouvez échanger directement avec la direction ici et suivre vos commandes en direct.
 
-📌 Ce message officiel reste fixé en première position au sommet de nos échanges pour que vous puissiez toujours vous y référer pour voir nos heures et nos modes de travail.`,
+📌 Ce message officiel reste fixé en première position de nos échanges pour que vous puissiez toujours vous référer à nos horaires et nos conditions.`,
         createdAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
         read: true,
       };
@@ -235,32 +245,31 @@ Bonjour ${customerToReturn.fullName}, votre compte client a été créé avec su
       db.chatMessages.push(welcomeMsg);
     }
 
-    // Créer une notification persistante pour l'administrateur
+    // Notification administrative persistante (visible seulement dans la session admin)
     const newNotif: ServerNotification = {
       id: `notif-${Date.now()}`,
       type: 'customer',
-      title: 'Nouvelle Inscription Client Reçue',
-      message: `${customerToReturn.fullName} (${customerToReturn.phone}) a créé un compte. En attente de validation au ${db.settings.companyPhone}.`,
+      title: 'Nouveau Compte Client Actif',
+      message: `${customerToReturn.fullName} (${customerToReturn.phone}) a ouvert son compte client. Compte actif immédiatement.`,
       createdAt: new Date().toISOString(),
       read: false,
       customerId: customerToReturn.id,
     };
 
     db.notifications.unshift(newNotif);
-    // Limiter l'historique des notifications à 100
     if (db.notifications.length > 100) {
       db.notifications = db.notifications.slice(0, 100);
     }
 
     saveDatabase(db);
-    console.log(`[API] Client inscrit: ${customerToReturn.fullName} (${customerToReturn.phone}) - En attente validation`);
+    console.log(`[API] Client inscrit: ${customerToReturn.fullName} (${customerToReturn.phone}) - Compte Validé Directement`);
     res.json({ success: true, customer: customerToReturn, notification: newNotif });
   });
 
-  // Validation ou mise à jour d'un client par l'administrateur
+  // Mise à jour d'un client par l'administrateur (bloquer, débloquer, modifier profil, avatar, location)
   app.patch('/api/customers/:id', (req, res) => {
     const { id } = req.params;
-    const { status, notes, fullName, phone, city, address } = req.body;
+    const { status, notes, fullName, phone, city, address, avatar, location, isBlocked, blockedReason } = req.body;
 
     const customerIndex = db.customers.findIndex((c) => c.id === id);
     if (customerIndex === -1) {
@@ -268,28 +277,29 @@ Bonjour ${customerToReturn.fullName}, votre compte client a été créé avec su
     }
 
     const current = db.customers[customerIndex];
-    const isNowValid = status === 'valide';
-    const isNowRejected = status === 'rejete';
-    const isNowPending = status === 'en_attente_validation';
+    const willBeBlocked = status === 'bloque' || isBlocked === true;
+    const willBeValid = status === 'valide' || isBlocked === false;
 
     const updatedCustomer: Customer = {
       ...current,
-      status: status || current.status,
-      pendingVerification: isNowValid || isNowRejected ? false : (isNowPending ? true : Boolean(current.pendingVerification)),
+      status: willBeBlocked ? 'bloque' : (willBeValid ? 'valide' : (status || current.status)),
+      isBlocked: willBeBlocked ? true : (willBeValid ? false : Boolean(current.isBlocked)),
+      blockedAt: willBeBlocked ? (current.blockedAt || new Date().toISOString()) : undefined,
+      blockedReason: willBeBlocked ? (blockedReason || current.blockedReason || 'Compte suspendu par l\'administrateur') : undefined,
+      pendingVerification: false,
       notes: notes !== undefined ? notes : current.notes,
       fullName: fullName || current.fullName,
       phone: phone || current.phone,
       city: city || current.city,
       address: address || current.address,
-      validatedAt:
-        status === 'valide'
-          ? new Date().toISOString().replace('T', ' ').substring(0, 16)
-          : current.validatedAt,
+      avatar: avatar !== undefined ? avatar : current.avatar,
+      location: location !== undefined ? location : current.location,
+      validatedAt: willBeValid ? (current.validatedAt || new Date().toISOString().replace('T', ' ').substring(0, 16)) : current.validatedAt,
     };
 
     db.customers[customerIndex] = updatedCustomer;
     saveDatabase(db);
-    console.log(`[API] Client mis à jour: ${updatedCustomer.fullName} -> Statut: ${updatedCustomer.status} (pendingVerification: ${updatedCustomer.pendingVerification})`);
+    console.log(`[API] Client mis à jour: ${updatedCustomer.fullName} -> Statut: ${updatedCustomer.status} (Bloqué: ${updatedCustomer.isBlocked})`);
     res.json({ success: true, customer: updatedCustomer });
   });
 

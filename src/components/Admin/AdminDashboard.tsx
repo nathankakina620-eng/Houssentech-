@@ -47,6 +47,8 @@ import {
   FileText,
   Bell,
   ArrowRight,
+  MapPin,
+  ShieldAlert,
 } from 'lucide-react';
 import { compressImageFile } from '../../utils/imageCompressor';
 import { useStore } from '../../context/StoreContext';
@@ -92,6 +94,8 @@ export const AdminDashboard: React.FC<{ onClose: () => void }> = ({ onClose }) =
     updateStock,
     validateCustomer,
     rejectCustomer,
+    blockCustomer,
+    unblockCustomer,
     deleteCustomer,
     acceptOrder,
     rejectOrder,
@@ -141,7 +145,7 @@ export const AdminDashboard: React.FC<{ onClose: () => void }> = ({ onClose }) =
 
   // Search & filter for products tab
   const [productSearch, setProductSearch] = useState('');
-  const [customerFilter, setCustomerFilter] = useState<'all' | 'pending' | 'validated'>('all');
+  const [customerFilter, setCustomerFilter] = useState<'all' | 'active' | 'blocked'>('all');
   const [orderFilter, setOrderFilter] = useState<string>('all');
 
   // Chat in admin state
@@ -426,13 +430,11 @@ export const AdminDashboard: React.FC<{ onClose: () => void }> = ({ onClose }) =
       p.sku.toLowerCase().includes(productSearch.toLowerCase())
   );
 
-  const pendingCustomers = customers.filter(
-    (c) => c.status === 'en_attente_validation' || c.pendingVerification === true
-  );
+  const activeCustomers = customers.filter((c) => c.status !== 'bloque' && !c.isBlocked);
+  const blockedCustomers = customers.filter((c) => c.status === 'bloque' || c.isBlocked);
   const filteredCustomers = customers.filter((c) => {
-    const isPending = c.status === 'en_attente_validation' || c.pendingVerification === true;
-    if (customerFilter === 'pending') return isPending;
-    if (customerFilter === 'validated') return c.status === 'valide' && !c.pendingVerification;
+    if (customerFilter === 'active') return c.status !== 'bloque' && !c.isBlocked;
+    if (customerFilter === 'blocked') return c.status === 'bloque' || c.isBlocked;
     return true;
   });
 
@@ -541,10 +543,10 @@ export const AdminDashboard: React.FC<{ onClose: () => void }> = ({ onClose }) =
           }`}
         >
           <Users className="w-4 h-4" />
-          <span>Inscriptions Clients ({customers.length})</span>
-          {pendingCustomers.length > 0 && (
-            <span className="px-1.5 py-0.2 bg-amber-500 text-slate-950 text-[10px] rounded-full font-black">
-              {pendingCustomers.length}
+          <span>Clients & Comptes ({customers.length})</span>
+          {blockedCustomers.length > 0 && (
+            <span className="px-1.5 py-0.2 bg-red-600 text-white text-[10px] rounded-full font-black" title={`${blockedCustomers.length} client(s) bloqué(s)`}>
+              {blockedCustomers.length} bloqué{blockedCustomers.length > 1 ? 's' : ''}
             </span>
           )}
         </button>
@@ -577,21 +579,18 @@ export const AdminDashboard: React.FC<{ onClose: () => void }> = ({ onClose }) =
       {/* Main Content Area */}
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-950">
         {/* Bannière d'alerte en direct : Inscriptions clients reçues sur la base de données */}
-        {pendingCustomers.length > 0 && (
-          <div className="mb-4 p-3.5 bg-gradient-to-r from-amber-950/90 via-amber-900/90 to-amber-950/90 border border-amber-500/60 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xl animate-fadeIn">
+        {blockedCustomers.length > 0 && (
+          <div className="mb-4 p-3.5 bg-gradient-to-r from-rose-950/80 via-rose-900/60 to-rose-950/80 border border-rose-500/50 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xl animate-fadeIn">
             <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-amber-500 text-slate-950 rounded-xl font-bold shadow-md">
-                <Bell className="w-5 h-5 animate-pulse" />
+              <div className="p-2.5 bg-rose-600 text-white rounded-xl font-bold shadow-md">
+                <ShieldAlert className="w-5 h-5" />
               </div>
               <div>
                 <h4 className="text-xs sm:text-sm font-black text-white flex items-center gap-2">
-                  <span>🔔 {pendingCustomers.length} nouveau(x) client(s) inscrit(s) en direct !</span>
-                  <span className="px-2 py-0.5 bg-amber-400 text-slate-950 rounded-md text-[10px] font-black uppercase">
-                    À Valider
-                  </span>
+                  <span>🔒 {blockedCustomers.length} compte(s) client(s) actuellement bloqué(s)</span>
                 </h4>
-                <p className="text-[11px] text-amber-200 mt-0.5">
-                  Dernière inscription : <strong>{pendingCustomers[0].fullName}</strong> ({pendingCustomers[0].phone}) • Ville : {pendingCustomers[0].city}
+                <p className="text-[11px] text-rose-200 mt-0.5">
+                  Dernier compte bloqué : <strong>{blockedCustomers[0].fullName}</strong> ({blockedCustomers[0].phone})
                 </p>
               </div>
             </div>
@@ -599,11 +598,11 @@ export const AdminDashboard: React.FC<{ onClose: () => void }> = ({ onClose }) =
             <button
               onClick={() => {
                 setActiveTab('customers');
-                setCustomerFilter('pending');
+                setCustomerFilter('blocked');
               }}
-              className="px-4 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs rounded-xl shadow-md transition flex items-center gap-1.5 shrink-0 cursor-pointer active:scale-98"
+              className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center gap-1.5 shrink-0 cursor-pointer active:scale-98"
             >
-              <span>Valider les comptes ({pendingCustomers.length})</span>
+              <span>Gérer les comptes bloqués ({blockedCustomers.length})</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>
@@ -1193,7 +1192,7 @@ export const AdminDashboard: React.FC<{ onClose: () => void }> = ({ onClose }) =
               {/* Message officiel des horaires (Lun-Ven 8h-16h30, Sam 8h-14h) et modes de travail épinglé */}
               <EnterpriseWorkingHoursBanner compact={true} />
 
-              <div className="flex-1 p-4 overflow-y-auto space-y-3 bg-slate-950/70 text-xs">
+              <div className="flex-1 p-4 overflow-y-auto space-y-4 bg-slate-950/70 text-xs">
                 {chatMessages
                   .filter((m) => m.customerId === selectedChatCustomerId)
                   .map((msg) => {
@@ -1204,21 +1203,51 @@ export const AdminDashboard: React.FC<{ onClose: () => void }> = ({ onClose }) =
                         className={`flex flex-col ${isFromAdmin ? 'items-end' : 'items-start'}`}
                       >
                         <div
-                          className={`max-w-[80%] p-3 rounded-2xl ${
+                          className={`max-w-[85%] p-3.5 rounded-2xl shadow-lg transition ${
                             isFromAdmin
-                              ? 'bg-red-600 text-white rounded-br-xs'
-                              : 'bg-slate-800 text-slate-200 rounded-bl-xs border border-slate-700'
+                              ? 'bg-gradient-to-br from-red-600 to-rose-700 text-white rounded-tr-xs shadow-red-600/20'
+                              : 'bg-slate-900 text-slate-100 rounded-tl-xs border-2 border-slate-700 shadow-md'
                           }`}
                         >
-                          {msg.text && <p className="leading-relaxed whitespace-pre-line">{msg.text}</p>}
+                          {/* En-tête de bulle très distinctif */}
+                          <div className={`flex items-center gap-2 mb-2 pb-1.5 border-b ${
+                            isFromAdmin ? 'border-white/20 justify-end' : 'border-slate-800'
+                          }`}>
+                            {isFromAdmin ? (
+                              <>
+                                <span className="text-[11px] font-black text-amber-200">
+                                  👑 VOUS (ADMINISTRATEUR)
+                                </span>
+                                <span className="px-1.5 py-0.5 rounded bg-black/30 text-[10px] font-bold text-amber-300">
+                                  Direction
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold">
+                                  👤 CLIENT
+                                </span>
+                                <span className="text-[11px] font-black text-slate-200">
+                                  {msg.customerName || 'Client'}
+                                </span>
+                              </>
+                            )}
+                          </div>
+
+                          {msg.text && (
+                            <p className="leading-relaxed whitespace-pre-line text-xs sm:text-sm font-normal">
+                              {msg.text}
+                            </p>
+                          )}
                           <ChatMessageBubbleImages
                             images={msg.images}
                             onImageClick={(url) => setAdminLightboxImage(url)}
                           />
                         </div>
-                        <span className="text-[9px] text-slate-500 mt-0.5 font-mono">
-                          {isFromAdmin ? 'Moi (Gérant) • ' : `${msg.customerName} • `}
-                          {msg.createdAt}
+                        <span className="text-[10px] text-slate-500 mt-1 px-1 font-mono flex items-center gap-1">
+                          <span>{isFromAdmin ? '👑 Vous' : `👤 ${msg.customerName}`}</span>
+                          <span>•</span>
+                          <span>{msg.createdAt.substring(11, 16) || msg.createdAt}</span>
                         </span>
                       </div>
                     );
@@ -1293,108 +1322,191 @@ export const AdminDashboard: React.FC<{ onClose: () => void }> = ({ onClose }) =
             <div className="bg-slate-900 p-4 rounded-2xl border border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
               <div>
                 <h2 className="text-base font-bold text-white flex items-center gap-2">
-                  <Phone className="w-4 h-4 text-red-500" />
-                  <span>Validation des Inscriptions par le Numéro de l'Entreprise</span>
+                  <Users className="w-4 h-4 text-red-500" />
+                  <span>Gestion des Comptes Clients & Emplacement Map</span>
                 </h2>
                 <p className="text-xs text-slate-400">
-                  Les clients envoient leur demande au <strong className="text-white font-mono">{settings.companyPhone}</strong>. Activez les comptes ici.
+                  Les comptes sont activés directement. Vous pouvez bloquer temporairement un compte ou le supprimer définitivement pour de bon.
                 </p>
               </div>
 
               <div className="flex bg-slate-800 p-1 rounded-xl border border-slate-700 text-xs">
                 <button
                   onClick={() => setCustomerFilter('all')}
-                  className={`px-3 py-1 rounded-lg font-bold transition ${
-                    customerFilter === 'all' ? 'bg-slate-700 text-white' : 'text-slate-400'
+                  className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer ${
+                    customerFilter === 'all' ? 'bg-slate-700 text-white shadow-xs' : 'text-slate-400 hover:text-white'
                   }`}
                 >
                   Tous ({customers.length})
                 </button>
                 <button
-                  onClick={() => setCustomerFilter('pending')}
-                  className={`px-3 py-1 rounded-lg font-bold transition ${
-                    customerFilter === 'pending' ? 'bg-red-600 text-white' : 'text-slate-400'
+                  onClick={() => setCustomerFilter('active')}
+                  className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer ${
+                    customerFilter === 'active' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-400 hover:text-white'
                   }`}
                 >
-                  En attente ({pendingCustomers.length})
+                  Actifs ({activeCustomers.length})
                 </button>
                 <button
-                  onClick={() => setCustomerFilter('validated')}
-                  className={`px-3 py-1 rounded-lg font-bold transition ${
-                    customerFilter === 'validated' ? 'bg-emerald-600 text-white' : 'text-slate-400'
+                  onClick={() => setCustomerFilter('blocked')}
+                  className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer ${
+                    customerFilter === 'blocked' ? 'bg-red-600 text-white shadow-xs' : 'text-slate-400 hover:text-white'
                   }`}
                 >
-                  Validés
+                  Bloqués ({blockedCustomers.length})
                 </button>
               </div>
             </div>
 
             <div className="space-y-3">
-              {filteredCustomers.map((cust) => {
-                const isPending = cust.status === 'en_attente_validation' || cust.pendingVerification === true;
-                return (
-                  <div
-                    key={cust.id}
-                    className={`p-4 rounded-2xl border transition flex flex-col md:flex-row items-start md:items-center justify-between gap-4 ${
-                      isPending ? 'bg-amber-950/20 border-amber-500/40' : 'bg-slate-900 border-slate-800'
-                    }`}
-                  >
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2.5 flex-wrap">
-                        <span className="font-bold text-sm text-white">{cust.fullName}</span>
-                        <span className="font-mono text-xs text-slate-300 bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
-                          {cust.phone}
-                        </span>
-                        {isPending ? (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-amber-500/20 text-amber-400 border border-amber-500/30">
-                            En attente validation
-                          </span>
+              {filteredCustomers.length === 0 ? (
+                <div className="p-8 text-center bg-slate-900 rounded-2xl border border-slate-800 text-slate-400 space-y-2">
+                  <Users className="w-8 h-8 mx-auto text-slate-600" />
+                  <p className="font-semibold text-slate-300">Aucun client dans cette catégorie</p>
+                </div>
+              ) : (
+                filteredCustomers.map((cust) => {
+                  const isBlocked = cust.status === 'bloque' || cust.isBlocked === true;
+                  return (
+                    <div
+                      key={cust.id}
+                      className={`p-4 rounded-2xl border transition flex flex-col md:flex-row items-start md:items-center justify-between gap-4 ${
+                        isBlocked
+                          ? 'bg-rose-950/20 border-rose-500/40'
+                          : 'bg-slate-900 border-slate-800'
+                      }`}
+                    >
+                      <div className="flex items-start gap-3.5 flex-1 min-w-0">
+                        {/* Photo de profil ou initiales */}
+                        {cust.avatar ? (
+                          <img
+                            src={cust.avatar}
+                            alt={cust.fullName}
+                            className={`w-12 h-12 rounded-2xl object-cover shrink-0 border-2 shadow-md ${
+                              isBlocked ? 'border-rose-500' : 'border-emerald-500'
+                            }`}
+                          />
                         ) : (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                            Validé
-                          </span>
+                          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-sm shrink-0 border shadow-md ${
+                            isBlocked ? 'bg-rose-950 border-rose-600 text-rose-300' : 'bg-slate-800 border-slate-700 text-slate-300'
+                          }`}>
+                            {cust.fullName.substring(0, 2).toUpperCase()}
+                          </div>
                         )}
-                      </div>
-                      <div className="flex items-center gap-3 text-xs text-slate-400">
-                        <span>Ville : <strong className="text-slate-300">{cust.city}</strong></span>
-                        <span>• Code : <strong className="font-mono text-amber-400">{cust.validationCode}</strong></span>
-                        <span>• Date : {cust.registeredAt}</span>
-                      </div>
-                    </div>
 
-                    <div className="flex items-center gap-2 self-end md:self-center">
-                      {isPending && (
+                        <div className="space-y-1 min-w-0 flex-1">
+                          <div className="flex items-center gap-2.5 flex-wrap">
+                            <span className="font-bold text-sm text-white truncate">{cust.fullName}</span>
+                            <span className="font-mono text-xs text-slate-300 bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
+                              {cust.phone}
+                            </span>
+                            {isBlocked ? (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                                ● Bloqué / Suspendu
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                                ● Compte Actif
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-3 text-xs text-slate-400 flex-wrap">
+                            <span>Ville : <strong className="text-slate-300">{cust.city}</strong></span>
+                            {cust.address && <span>• Quartier : <strong className="text-slate-300">{cust.address}</strong></span>}
+                            <span>• Inscrit le : {cust.registeredAt}</span>
+                          </div>
+
+                          {/* Emplacement Map & Coordonnées GPS du client */}
+                          {cust.location && (
+                            <div className="pt-1 flex items-center gap-2 flex-wrap">
+                              <span className="text-[11px] text-slate-400 flex items-center gap-1">
+                                <MapPin className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                                <span>
+                                  Map : {cust.location.commune || cust.city} ({cust.location.latitude.toFixed(3)}, {cust.location.longitude.toFixed(3)})
+                                </span>
+                              </span>
+                              <a
+                                href={`https://www.google.com/maps?q=${cust.location.latitude},${cust.location.longitude}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-2 py-0.5 bg-rose-950/60 hover:bg-rose-900 border border-rose-600/40 text-rose-300 text-[10px] font-bold rounded-md flex items-center gap-1 transition"
+                              >
+                                <span>Voir sur Google Maps</span>
+                                <ExternalLink className="w-2.5 h-2.5" />
+                              </a>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Boutons d'actions pour l'administrateur */}
+                      <div className="flex items-center gap-2 self-end md:self-center shrink-0 flex-wrap">
+                        {isBlocked ? (
+                          <button
+                            onClick={() => unblockCustomer(cust.id)}
+                            className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center gap-1.5 cursor-pointer"
+                            title="Débloquer l'accès de ce client"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                            <span>Débloquer</span>
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              if (confirm(`Bloquer le compte de ${cust.fullName} ? Ce client ne pourra plus passer de commande ni envoyer de messages.`)) {
+                                blockCustomer(cust.id);
+                              }
+                            }}
+                            className="px-3 py-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-bold text-xs rounded-xl transition flex items-center gap-1.5 cursor-pointer"
+                            title="Bloquer temporairement ce client"
+                          >
+                            <ShieldAlert className="w-3.5 h-3.5" />
+                            <span>Bloquer</span>
+                          </button>
+                        )}
+
                         <button
-                          onClick={() => validateCustomer(cust.id)}
-                          className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 font-bold text-xs text-white rounded-xl shadow-md transition flex items-center gap-1.5"
+                          onClick={() => {
+                            setSelectedChatCustomerId(cust.id);
+                            setActiveTab('chat');
+                          }}
+                          className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-semibold text-xs rounded-xl transition flex items-center gap-1.5 cursor-pointer"
+                          title="Ouvrir la discussion avec ce client"
                         >
-                          <Check className="w-4 h-4" />
-                          <span>Valider l'Inscription</span>
+                          <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
+                          <span className="hidden sm:inline">Message</span>
                         </button>
-                      )}
 
-                      <a
-                        href={`https://wa.me/${cust.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
-                          `Bonjour ${cust.fullName}, votre compte client chez ${settings.companyName} a bien été validé par le gérant !`
-                        )}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="px-3 py-2 bg-emerald-950/60 hover:bg-emerald-900 border border-emerald-600/40 text-emerald-300 font-semibold text-xs rounded-xl transition flex items-center gap-1.5"
-                      >
-                        <MessageSquare className="w-4 h-4" />
-                        <span>WhatsApp Client</span>
-                      </a>
+                        <a
+                          href={`https://wa.me/${cust.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
+                            `Bonjour ${cust.fullName}, je vous contacte depuis la direction HOUSSETECH.`
+                          )}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-3 py-2 bg-emerald-950/60 hover:bg-emerald-900 border border-emerald-600/40 text-emerald-300 font-semibold text-xs rounded-xl transition flex items-center gap-1.5"
+                          title="WhatsApp direct"
+                        >
+                          <Phone className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">WhatsApp</span>
+                        </a>
 
-                      <button
-                        onClick={() => deleteCustomer(cust.id)}
-                        className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                        <button
+                          onClick={() => {
+                            if (confirm(`Supprimer DÉFINITIVEMENT le compte de ${cust.fullName} (${cust.phone}) ? Cette action est irréversible.`)) {
+                              deleteCustomer(cust.id);
+                            }
+                          }}
+                          className="p-2 rounded-xl bg-slate-800 hover:bg-rose-950 border border-slate-700 hover:border-rose-600/50 text-slate-400 hover:text-rose-400 transition cursor-pointer"
+                          title="Supprimer définitivement ce compte client"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
             </div>
           </div>
         )}

@@ -315,9 +315,11 @@ export const INITIAL_CUSTOMERS: Customer[] = [
     city: 'Kinshasa (Gombe)',
     address: 'Av. Justice N°14',
     registeredAt: '2026-10-10 14:20',
-    status: 'en_attente_validation',
-    pendingVerification: true,
+    status: 'valide',
+    pendingVerification: false,
+    isBlocked: false,
     validationCode: 'VAL-7821',
+    validatedAt: '2026-10-10 14:20',
     notes: 'Demande envoyée au numéro de l\'entreprise +243900042404',
   },
   {

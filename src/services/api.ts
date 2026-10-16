@@ -1,4 +1,4 @@
-import { Customer, Order, ChatMessage, StoreSettings, Product } from '../types';
+import { Customer, CustomerStatus, CustomerLocation, Order, ChatMessage, StoreSettings, Product } from '../types';
 
 export interface SyncResponse {
   customers: Customer[];
@@ -66,12 +66,16 @@ export const api = {
   async updateCustomer(
     customerId: string,
     updates: {
-      status?: 'en_attente_validation' | 'valide' | 'rejete';
+      status?: CustomerStatus;
+      isBlocked?: boolean;
+      blockedReason?: string;
       notes?: string;
       fullName?: string;
       phone?: string;
       city?: string;
       address?: string;
+      avatar?: string;
+      location?: import('../types').CustomerLocation;
     }
   ): Promise<{ success: boolean; customer?: Customer }> {
     try {

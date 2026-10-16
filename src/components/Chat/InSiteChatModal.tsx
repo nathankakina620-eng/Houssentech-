@@ -1,13 +1,37 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MessageSquare, Send, X, ShieldCheck, User, MessageCircle, Phone, ExternalLink, ImagePlus } from 'lucide-react';
+import {
+  MessageSquare,
+  Send,
+  X,
+  Phone,
+  ExternalLink,
+  ImagePlus,
+  ArrowLeft,
+  ShoppingBag,
+  ShieldAlert,
+  Crown,
+  User,
+  Sparkles,
+} from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
 import { EnterpriseWorkingHoursBanner } from './EnterpriseWorkingHoursBanner';
 import { ChatImageLightbox } from './ChatImageLightbox';
 import { ChatImageUploader } from './ChatImageUploader';
 import { ChatMessageBubbleImages } from './ChatMessageBubbleImages';
 
-export const InSiteChatModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
-  const { chatMessages, sendChatMessage, currentUser, settings, getWhatsAppUrl, markChatAsRead } = useStore();
+export const InSiteChatModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
+  isOpen,
+  onClose,
+}) => {
+  const {
+    chatMessages,
+    sendChatMessage,
+    currentUser,
+    settings,
+    getWhatsAppUrl,
+    markChatAsRead,
+  } = useStore();
+
   const [inputText, setInputText] = useState('');
   const [images, setImages] = useState<string[]>([]);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
@@ -16,12 +40,18 @@ export const InSiteChatModal: React.FC<{ isOpen: boolean; onClose: () => void }>
   const [guestPhone, setGuestPhone] = useState(currentUser?.phone || '');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const activeCustId = currentUser?.id || (guestPhone ? `guest-${guestPhone.replace(/[^0-9]/g, '')}` : 'guest-current');
+  const activeCustId =
+    currentUser?.id ||
+    (guestPhone ? `guest-${guestPhone.replace(/[^0-9]/g, '')}` : 'guest-current');
 
   // Filter messages for current user/guest
   const conversation = chatMessages.filter(
-    (m) => m.customerId === activeCustId || (currentUser && m.customerId === currentUser.id)
+    (m) =>
+      m.customerId === activeCustId ||
+      (currentUser && m.customerId === currentUser.id)
   );
+
+  const isBlocked = currentUser?.status === 'bloque' || currentUser?.isBlocked;
 
   useEffect(() => {
     if (isOpen) {
@@ -37,6 +67,7 @@ export const InSiteChatModal: React.FC<{ isOpen: boolean; onClose: () => void }>
 
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isBlocked) return;
     if (!inputText.trim() && images.length === 0) return;
 
     sendChatMessage(
@@ -52,187 +83,248 @@ export const InSiteChatModal: React.FC<{ isOpen: boolean; onClose: () => void }>
   };
 
   return (
-    <div className="fixed bottom-20 right-4 sm:right-6 z-50 w-[92vw] sm:w-96 rounded-2xl bg-slate-900 border border-slate-700 shadow-2xl flex flex-col overflow-hidden text-slate-100 max-h-[540px] animate-fadeIn">
-      {/* Header */}
-      <div className="bg-slate-800/90 px-4 py-3 border-b border-slate-700 flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <div className="relative">
-            <div className="w-8 h-8 rounded-full bg-red-600 text-white flex items-center justify-center font-bold text-xs shadow-md">
-              HT
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-2 sm:p-4 overflow-y-auto">
+      {/* Fenêtre non flottante, élégante, centrée avec bouton de sortie immédiat */}
+      <div className="relative w-full max-w-3xl h-[94vh] sm:h-[88vh] rounded-3xl bg-slate-900 border border-slate-700 shadow-2xl flex flex-col overflow-hidden text-slate-100 animate-fadeIn">
+        
+        {/* BARRE DE SORTIE OBLIGATOIRE : Permet de quitter la conversation et voir les articles sur la page d'accueil */}
+        <div className="bg-slate-950 px-4 py-3 border-b border-slate-800 flex items-center justify-between gap-3 shrink-0">
+          <button
+            onClick={onClose}
+            className="flex items-center gap-2 px-3.5 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs sm:text-sm font-black shadow-lg shadow-red-600/30 transition active:scale-95 cursor-pointer"
+            title="Quitter la conversation et revenir aux articles du catalogue"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Quitter la conversation & voir les articles</span>
+            <ShoppingBag className="w-4 h-4 hidden sm:inline" />
+          </button>
+
+          <button
+            onClick={onClose}
+            className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+            title="Fermer"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* En-tête de conversation officiel avec statut du Gérant */}
+        <div className="bg-slate-900/90 px-4 py-3 border-b border-slate-800 flex items-center justify-between gap-3 shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-red-600 to-amber-600 text-white flex items-center justify-center font-black text-sm shadow-md">
+                👑
+              </div>
+              <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 border-2 border-slate-900" />
             </div>
-            <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-slate-900" />
-          </div>
-          <div>
-            <h3 className="font-bold text-xs text-white flex items-center gap-1.5">
-              <span>Gérant HOUSSETECH</span>
-              <span className="text-[10px] bg-red-950 text-red-400 px-1.5 py-0.2 rounded border border-red-800">
-                Direct Site
-              </span>
-            </h3>
-            <p className="text-[10px] text-slate-400">Discussion privée en direct sur le site</p>
-          </div>
-        </div>
-
-        <button
-          onClick={onClose}
-          className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700"
-        >
-          <X className="w-4 h-4" />
-        </button>
-      </div>
-
-      {/* Switch to WhatsApp Shortcut Button */}
-      <div className="bg-emerald-950/60 px-3 py-2 border-b border-emerald-800/50 flex items-center justify-between text-xs text-emerald-200">
-        <span className="text-[11px] flex items-center gap-1">
-          <Phone className="w-3 h-3 text-emerald-400" />
-          WhatsApp : <strong className="font-mono text-white">{settings.companyPhone}</strong>
-        </span>
-        <a
-          href={getWhatsAppUrl(`Bonjour Gérant HOUSSETECH (${settings.companyPhone}), je vous écris depuis le site...`)}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="px-2 py-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold rounded-lg shadow-xs flex items-center gap-1 transition active:scale-95"
-        >
-          <MessageCircle className="w-3 h-3" />
-          <span>Basculer sur WhatsApp</span>
-          <ExternalLink className="w-2.5 h-2.5" />
-        </a>
-      </div>
-
-      {/* MESSAGE ÉPINGLÉ AU-DESSUS DE TOUTES LES CONVERSATIONS : Heures de travail et Modes de commande */}
-      {currentUser ? (
-        <EnterpriseWorkingHoursBanner compact={true} />
-      ) : (
-        <div className="p-2.5 bg-amber-950/40 border-b border-amber-800/40 text-[10.5px] text-amber-200">
-          <span>🔒 Horaires officiels (Lun-Ven 8h-16h30, Sam 8h-14h) & modes de travail activés dès l'inscription.</span>
-        </div>
-      )}
-
-      {/* Message history */}
-      <div className="flex-1 p-3.5 overflow-y-auto space-y-2.5 bg-slate-950/70 text-xs min-h-[220px]">
-        {conversation.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-center p-4 text-slate-400 space-y-2">
-            <MessageSquare className="w-8 h-8 text-slate-600" />
-            <p className="font-semibold text-slate-300">Bienvenue dans la messagerie du site !</p>
-            <p className="text-[11px] text-slate-500">
-              Posez directement vos questions sur les pièces, disponibilités, prix ou suivi de votre commande. Le gérant vous répond ici.
-            </p>
-          </div>
-        ) : (
-          conversation.map((msg) => {
-            const isMe = msg.sender === 'client';
-            return (
-              <div
-                key={msg.id}
-                className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}
-              >
-                <div
-                  className={`max-w-[85%] p-2.5 rounded-2xl ${
-                    isMe
-                      ? 'bg-red-600 text-white rounded-br-xs'
-                      : 'bg-slate-800 text-slate-200 rounded-bl-xs border border-slate-700'
-                  }`}
-                >
-                  {msg.text && <p className="leading-relaxed whitespace-pre-line">{msg.text}</p>}
-                  <ChatMessageBubbleImages
-                    images={msg.images}
-                    onImageClick={(url) => setLightboxImage(url)}
-                  />
-                </div>
-                <span className="text-[9px] text-slate-500 mt-0.5 px-1 font-mono">
-                  {msg.sender === 'admin' ? 'Gérant • ' : 'Moi • '}
-                  {msg.createdAt.substring(11, 16)}
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-bold text-sm text-white">
+                  Direction & Administration HOUSSETECH
+                </h3>
+                <span className="text-[10px] bg-amber-500/20 text-amber-300 font-bold px-2 py-0.5 rounded-full border border-amber-500/30">
+                  Support Officiel
                 </span>
               </div>
-            );
-          })
-        )}
-        <div ref={messagesEndRef} />
-      </div>
+              <p className="text-xs text-slate-400">
+                Discussion directe en tête-à-tête avec le gérant pour vos questions, pièces et commandes
+              </p>
+            </div>
+          </div>
 
-      {/* Input Form with Photo Upload */}
-      <form onSubmit={handleSend} className="p-2.5 bg-slate-900 border-t border-slate-800 space-y-2">
-        {!currentUser && !guestPhone && (
-          <div className="grid grid-cols-2 gap-1.5 pb-1">
-            <input
-              type="text"
-              placeholder="Votre Nom..."
-              value={guestName}
-              onChange={(e) => setGuestName(e.target.value)}
-              className="px-2 py-1 text-[11px] bg-slate-800 border border-slate-700 rounded-lg text-white"
-            />
-            <input
-              type="tel"
-              placeholder="Votre Téléphone..."
-              value={guestPhone}
-              onChange={(e) => setGuestPhone(e.target.value)}
-              className="px-2 py-1 text-[11px] bg-slate-800 border border-slate-700 rounded-lg text-white"
-            />
+          <a
+            href={getWhatsAppUrl(`Bonjour Gérant HOUSSETECH (${settings.companyPhone}), je vous écris depuis la messagerie du site.`)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-emerald-950/60 hover:bg-emerald-900 border border-emerald-600/40 text-emerald-300 text-xs font-bold rounded-xl transition"
+          >
+            <Phone className="w-3.5 h-3.5 text-emerald-400" />
+            <span>WhatsApp : {settings.companyPhone}</span>
+            <ExternalLink className="w-3 h-3" />
+          </a>
+        </div>
+
+        {/* MESSAGE ÉPINGLÉ : Heures de travail et modes de commande */}
+        <EnterpriseWorkingHoursBanner compact={true} />
+
+        {/* Avertissement de compte bloqué si applicable */}
+        {isBlocked && (
+          <div className="p-3 bg-red-950/70 border-b border-red-700/60 text-xs text-red-200 flex items-center gap-2 shrink-0">
+            <ShieldAlert className="w-5 h-5 text-red-400 shrink-0" />
+            <div>
+              <strong>Compte client suspendu :</strong> Votre compte a été temporairement bloqué par l'administrateur. L'envoi de nouveaux messages est restreint. Veuillez contacter le support.
+            </div>
           </div>
         )}
 
-        {/* Prévisualisation des photos sélectionnées */}
-        <ChatImageUploader
-          images={images}
-          onImagesChange={setImages}
-        />
+        {/* HISTORIQUE DE CONVERSATION : DISTINCTION NETTE DES MESSAGES ADMINISTRATEUR VS CLIENT */}
+        <div className="flex-1 p-4 sm:p-6 overflow-y-auto space-y-4 bg-slate-950/70 text-xs">
+          {conversation.length === 0 ? (
+            <div className="h-full min-h-[220px] flex flex-col items-center justify-center text-center p-6 text-slate-400 space-y-3">
+              <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 text-red-500">
+                <MessageSquare className="w-10 h-10" />
+              </div>
+              <h4 className="font-bold text-base text-slate-200">
+                Bienvenue dans votre messagerie privée HOUSSETECH
+              </h4>
+              <p className="text-xs text-slate-400 max-w-md leading-relaxed">
+                Posez vos questions sur la disponibilité des pièces, les tarifs, ou le suivi de vos commandes. Le gérant et l'administrateur vous répondent directement ici.
+              </p>
+            </div>
+          ) : (
+            conversation.map((msg) => {
+              const isFromAdmin = msg.sender === 'admin';
+              return (
+                <div
+                  key={msg.id}
+                  className={`flex flex-col ${isFromAdmin ? 'items-start' : 'items-end'}`}
+                >
+                  <div
+                    className={`max-w-[88%] sm:max-w-[78%] p-3.5 rounded-2xl shadow-lg transition ${
+                      isFromAdmin
+                        ? 'bg-gradient-to-br from-slate-900 via-slate-850 to-slate-900 text-slate-100 rounded-tl-xs border-2 border-amber-500/40 shadow-amber-500/5'
+                        : 'bg-gradient-to-br from-red-600 to-rose-700 text-white rounded-tr-xs shadow-red-600/20'
+                    }`}
+                  >
+                    {/* EN-TÊTE DE BULLE DISTINCTIF */}
+                    {isFromAdmin ? (
+                      <div className="flex items-center gap-2 mb-2 pb-2 border-b border-amber-500/20">
+                        <span className="p-1 rounded-md bg-amber-500/20 text-amber-400 font-bold text-[10px] flex items-center gap-1">
+                          <Crown className="w-3 h-3 text-amber-400" />
+                          <span>ADMINISTRATEUR</span>
+                        </span>
+                        <span className="text-[11px] font-black text-amber-300">
+                          Direction HOUSSETECH
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-end gap-2 mb-2 pb-1.5 border-b border-white/20">
+                        <span className="text-[11px] font-bold text-white/95">
+                          {currentUser?.fullName || msg.customerName || 'Client'}
+                        </span>
+                        <span className="px-1.5 py-0.5 rounded bg-black/25 text-red-200 text-[10px] font-bold flex items-center gap-1">
+                          <User className="w-3 h-3" />
+                          <span>Client</span>
+                        </span>
+                      </div>
+                    )}
 
-        <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl border border-slate-700 transition shrink-0 cursor-pointer"
-            title="Joindre une ou plusieurs photos"
-          >
-            <ImagePlus className="w-4 h-4 text-red-500" />
-          </button>
+                    {/* TEXTE DU MESSAGE */}
+                    {msg.text && (
+                      <p className="leading-relaxed whitespace-pre-line text-xs sm:text-sm font-normal">
+                        {msg.text}
+                      </p>
+                    )}
 
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            accept="image/*"
-            onChange={(e) => {
-              const files = e.target.files;
-              if (!files || files.length === 0) return;
-              const promises = Array.from(files).map((f) => {
-                return new Promise<string>((res) => {
-                  const r = new FileReader();
-                  r.onload = (ev) => res(ev.target?.result as string);
-                  r.readAsDataURL(f);
-                });
-              });
-              Promise.all(promises).then((imgs) => {
-                setImages((prev) => [...prev, ...imgs]);
-                if (fileInputRef.current) fileInputRef.current.value = '';
-              });
-            }}
-            className="hidden"
-          />
+                    {/* PHOTOS JOINTES */}
+                    <ChatMessageBubbleImages
+                      images={msg.images}
+                      onImageClick={(url) => setLightboxImage(url)}
+                    />
+                  </div>
 
-          <input
-            type="text"
-            placeholder="Écrivez un message ou envoyez des photos..."
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-400 focus:outline-hidden focus:border-red-500"
-          />
-
-          <button
-            type="submit"
-            disabled={!inputText.trim() && images.length === 0}
-            className="p-2 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white rounded-xl shadow-md transition active:scale-95 shrink-0 flex items-center justify-center cursor-pointer"
-          >
-            <Send className="w-4 h-4" />
-          </button>
+                  <span className="text-[10px] text-slate-500 mt-1 px-1 font-mono flex items-center gap-1">
+                    <span>{isFromAdmin ? '👑 Administrateur' : '👤 Vous'}</span>
+                    <span>•</span>
+                    <span>{msg.createdAt.substring(11, 16)}</span>
+                  </span>
+                </div>
+              );
+            })
+          )}
+          <div ref={messagesEndRef} />
         </div>
-      </form>
 
-      {/* Lightbox photo plein écran */}
-      <ChatImageLightbox
-        imageUrl={lightboxImage}
-        onClose={() => setLightboxImage(null)}
-      />
+        {/* FORMULAIRE DE SAISIE DE MESSAGE */}
+        <form onSubmit={handleSend} className="p-3 sm:p-4 bg-slate-900 border-t border-slate-800 space-y-2.5 shrink-0">
+          {!currentUser && !guestPhone && (
+            <div className="grid grid-cols-2 gap-2 pb-1">
+              <input
+                type="text"
+                placeholder="Votre Nom..."
+                value={guestName}
+                onChange={(e) => setGuestName(e.target.value)}
+                className="px-3 py-1.5 text-xs bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-400"
+              />
+              <input
+                type="tel"
+                placeholder="Votre Téléphone..."
+                value={guestPhone}
+                onChange={(e) => setGuestPhone(e.target.value)}
+                className="px-3 py-1.5 text-xs bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-400"
+              />
+            </div>
+          )}
+
+          {/* Prévisualisation des photos attachées */}
+          <ChatImageUploader images={images} onImagesChange={setImages} />
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={isBlocked}
+              onClick={() => fileInputRef.current?.click()}
+              className="p-2.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-300 hover:text-white rounded-xl border border-slate-700 transition shrink-0 cursor-pointer flex items-center gap-1.5"
+              title="Joindre une ou plusieurs photos"
+            >
+              <ImagePlus className="w-4 h-4 text-red-500" />
+              <span className="hidden sm:inline text-xs font-semibold">Photo</span>
+            </button>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept="image/*"
+              disabled={isBlocked}
+              onChange={(e) => {
+                const files = e.target.files;
+                if (!files || files.length === 0) return;
+                const promises = Array.from(files).map((f) => {
+                  return new Promise<string>((res) => {
+                    const r = new FileReader();
+                    r.onload = (ev) => res(ev.target?.result as string);
+                    r.readAsDataURL(f);
+                  });
+                });
+                Promise.all(promises).then((imgs) => {
+                  setImages((prev) => [...prev, ...imgs]);
+                  if (fileInputRef.current) fileInputRef.current.value = '';
+                });
+              }}
+              className="hidden"
+            />
+
+            <input
+              type="text"
+              disabled={isBlocked}
+              placeholder={
+                isBlocked
+                  ? 'Compte bloqué : Envoi temporairement restreint'
+                  : 'Écrivez votre message à l\'administrateur HOUSSETECH...'
+              }
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              className="flex-1 px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs sm:text-sm text-white placeholder-slate-400 focus:outline-hidden focus:border-red-500 disabled:opacity-50"
+            />
+
+            <button
+              type="submit"
+              disabled={isBlocked || (!inputText.trim() && images.length === 0)}
+              className="px-4 py-2.5 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white rounded-xl shadow-md shadow-red-600/30 transition active:scale-95 shrink-0 flex items-center gap-1.5 font-bold text-xs cursor-pointer"
+            >
+              <Send className="w-4 h-4" />
+              <span className="hidden sm:inline">Envoyer</span>
+            </button>
+          </div>
+        </form>
+
+        {/* Lightbox photo plein écran */}
+        <ChatImageLightbox
+          imageUrl={lightboxImage}
+          onClose={() => setLightboxImage(null)}
+        />
+      </div>
     </div>
   );
 };

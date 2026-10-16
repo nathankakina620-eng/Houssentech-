@@ -89,7 +89,17 @@ interface StoreContextType {
   ) => { customer: Customer; whatsappUrl: string; smsUrl: string; messageText: string };
   validateCustomer: (customerId: string) => void;
   rejectCustomer: (customerId: string) => void;
+  blockCustomer: (customerId: string, reason?: string) => void;
+  unblockCustomer: (customerId: string) => void;
   deleteCustomer: (customerId: string) => void;
+  updateCustomerProfile: (updates: {
+    avatar?: string;
+    location?: import('../types').CustomerLocation;
+    fullName?: string;
+    phone?: string;
+    city?: string;
+    address?: string;
+  }) => Promise<void>;
   loginWithPhone: (phone: string) => { success: boolean; status?: Customer['status']; customer?: Customer; message: string };
   logout: () => void;
   setCurrentUser: (cust: Customer | null) => void;
@@ -356,22 +366,19 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
         setCustomers(normalizedCustomers);
 
-        // Détection instantanée des nouveaux comptes clients créés sur d'autres téléphones
-        const currentPending = normalizedCustomers.filter((c) => c.status === 'en_attente_validation' || c.pendingVerification);
-        const currentPendingIds = new Set(currentPending.map((c) => c.id));
-
-        if (!isFirstSyncRef.current) {
-          const newlyAddedPending = currentPending.find((c) => !previousPendingIdsRef.current.has(c.id));
-          if (newlyAddedPending) {
+        // Détection instantanée des nouveaux comptes clients créés (visible UNIQUEMENT si l'administrateur est connecté)
+        if (!isFirstSyncRef.current && isAdmin) {
+          const newlyAdded = normalizedCustomers.find((c) => !previousPendingIdsRef.current.has(c.id));
+          if (newlyAdded) {
             playNotificationChime();
             setNewCustomerToast({
-              customer: newlyAddedPending,
-              message: `Nouveau compte client créé par ${newlyAddedPending.fullName} (${newlyAddedPending.phone}) ! En attente de validation officielle.`,
+              customer: newlyAdded,
+              message: `Nouveau compte client créé par ${newlyAdded.fullName} (${newlyAdded.phone}) ! Compte actif.`,
             });
           }
         }
         isFirstSyncRef.current = false;
-        previousPendingIdsRef.current = currentPendingIds;
+        previousPendingIdsRef.current = new Set(normalizedCustomers.map((c) => c.id));
 
         // Si l'utilisateur actuel est connecté, mettre à jour son statut en direct (ex: validation admin)
         if (currentUser) {
@@ -560,13 +567,20 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     );
   };
 
-  // Customer Registration & Validation with Company Number (+243900042404)
+  // Inscription client DIRECTEMENT ACTIVÉE (Aucune attente de validation requise)
   const registerCustomer = (
     fullName: string,
     phone: string,
     city: string,
     address?: string
   ) => {
+    // Règle d'exclusivité : Quand l'administrateur est connecté, un client ne peut pas ouvrir un compte dans le même angle
+    if (isAdmin) {
+      throw new Error(
+        "Une session Administrateur est actuellement ouverte. Veuillez d'abord vous déconnecter du compte administrateur pour créer un compte client."
+      );
+    }
+
     const validationCode = `VAL-${Math.floor(1000 + Math.random() * 9000)}`;
     const newCustomer: Customer = {
       id: `cust-${Date.now()}`,
@@ -575,15 +589,19 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       city,
       address: address || '',
       registeredAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
-      status: 'en_attente_validation',
-      pendingVerification: true,
+      status: 'valide', // Compte DIRECTEMENT VALIDÉ !
+      pendingVerification: false, // Plus aucune attente requise
+      isBlocked: false,
+      validatedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
       validationCode,
-      notes: `Demande envoyée au numéro de l'entreprise ${settings.companyPhone}`,
+      notes: `Compte client activé immédiatement à l'inscription`,
     };
 
     setCustomers((prev) => [newCustomer, ...prev.filter((c) => c.phone !== phone)]);
+    // Connexion automatique immédiate du client
+    setCurrentUser(newCustomer);
 
-    // Message officiel de l'entreprise envoyé automatiquement au client dès l'ouverture de son compte (fixé en tête de conversation)
+    // Message officiel de bienvenue envoyé automatiquement dans la messagerie
     const officialWelcomeMsg: ChatMessage = {
       id: `msg-welcome-${newCustomer.id}`,
       customerId: newCustomer.id,
@@ -592,7 +610,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       sender: 'admin',
       text: `🏢 BIENVENUE CHEZ HOUSSETECH — INFORMATIONS OFFICIELLES & MODES DE TRAVAIL
 
-Bonjour ${newCustomer.fullName}, votre compte client a été créé avec succès ! Voici nos horaires officiels et nos modes de travail pour chacune de vos commandes :
+Bonjour ${newCustomer.fullName}, votre compte client a été créé et activé avec succès ! Voici nos horaires officiels et nos modes de travail pour chacune de vos commandes :
 
 🕒 NOS HEURES DE TRAVAIL OFFICIELLES :
 • Lundi au Vendredi : 08h00 pile à 16h30
@@ -602,10 +620,10 @@ Bonjour ${newCustomer.fullName}, votre compte client a été créé avec succès
 📦 NOS MODES DE TRAVAIL POUR CHAQUE COMMANDE :
 1. Règle d'acompte : Acompte de 70% obligatoire pour toute commande supérieure à 200$, le solde restant (30%) est réglé à la livraison à Kinshasa.
 2. Expéditions convoi : Tous vos colis partent chaque samedi matin par convoi transitaire sécurisé vers Kinshasa.
-3. Validation officielle : Chaque article commandé est validé par l'administrateur (Articles acceptés vs Articles en attente).
+3. Échanges directs : Vous pouvez désormais m'envoyer un message et dialoguer directement avec moi ici !
 4. Traçabilité & Reçu : Suivi en direct du colis étape par étape et reçu officiel PDF téléchargeable avec QR Code.
 
-📌 Ce message officiel reste fixé en premier position au sommet de nos échanges pour que vous puissiez toujours vous y référer pour voir nos heures et nos modes de travail.`,
+📌 Ce message officiel reste fixé en premier position au sommet de nos échanges pour vous référer à nos horaires et nos conditions.`,
       createdAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
       read: true,
     };
@@ -613,13 +631,13 @@ Bonjour ${newCustomer.fullName}, votre compte client a été créé avec succès
     setChatMessages((prev) => [...prev, officialWelcomeMsg]);
 
     const cleanCompanyPhone = cleanPhoneForLink(settings.companyPhone);
-    const messageText = `🏍️ DEMANDE D'INSCRIPTION HOUSSETECH\nBonjour Gérant,\nJe souhaite valider mon inscription client sur votre site/application HOUSSETECH.\n\n👤 Nom : ${fullName}\n📱 Téléphone : ${phone}\n📍 Ville : ${city}\n🔑 Code Demande : ${validationCode}\n\nMerci de bien vouloir valider mon compte.`;
+    const messageText = `🏍️ INSCRIPTION HOUSSETECH ACTIVÉE\nBonjour Gérant,\nJe viens d'ouvrir mon compte client sur HOUSSETECH.\n\n👤 Nom : ${fullName}\n📱 Téléphone : ${phone}\n📍 Ville : ${city}\n\nMon compte est actif, je peux dès à présent échanger avec vous et passer mes commandes !`;
 
     const encodedMessage = encodeURIComponent(messageText);
     const whatsappUrl = `https://wa.me/${cleanCompanyPhone}?text=${encodedMessage}`;
     const smsUrl = `sms:${settings.companyPhone}?body=${encodedMessage}`;
 
-    // Envoi immédiat au serveur central pour que l'Administrateur reçoive la notification en direct sur son téléphone ou PC
+    // Envoi immédiat au serveur central
     api.registerCustomer({
       fullName,
       phone,
@@ -630,12 +648,12 @@ Bonjour ${newCustomer.fullName}, votre compte client a été créé avec succès
     }).then((res) => {
       if (res.success && res.customer) {
         setCustomers((prev) => [
-          { ...res.customer!, pendingVerification: res.customer!.status === 'en_attente_validation' },
+          res.customer!,
           ...prev.filter((c) => c.id !== res.customer!.id && c.phone !== res.customer!.phone)
         ]);
       }
     }).catch((err) => {
-      console.warn('Erreur envoi inscription au serveur:', err);
+      console.warn('Erreur synchronisation inscription:', err);
     });
 
     return {
@@ -654,6 +672,7 @@ Bonjour ${newCustomer.fullName}, votre compte client a été créé avec succès
               ...c,
               status: 'valide',
               pendingVerification: false,
+              isBlocked: false,
               validatedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
             }
           : c
@@ -661,15 +680,14 @@ Bonjour ${newCustomer.fullName}, votre compte client a été créé avec succès
     );
 
     if (currentUser && currentUser.id === customerId) {
-      setCurrentUser((prev) => (prev ? { ...prev, status: 'valide', pendingVerification: false } : null));
+      setCurrentUser((prev) => (prev ? { ...prev, status: 'valide', pendingVerification: false, isBlocked: false } : null));
     }
 
     if (newCustomerToast?.customer.id === customerId) {
       setNewCustomerToast(null);
     }
 
-    // Mise à jour sur le serveur central pour débloquer immédiatement le téléphone du client
-    api.updateCustomer(customerId, { status: 'valide' }).catch(console.warn);
+    api.updateCustomer(customerId, { status: 'valide', isBlocked: false }).catch(console.warn);
   };
 
   const rejectCustomer = (customerId: string) => {
@@ -684,6 +702,78 @@ Bonjour ${newCustomer.fullName}, votre compte client a été créé avec succès
     api.updateCustomer(customerId, { status: 'rejete' }).catch(console.warn);
   };
 
+  // Bloquer un compte client (temporairement ou pour de bon)
+  const blockCustomer = (customerId: string, reason?: string) => {
+    setCustomers((prev) =>
+      prev.map((c) =>
+        c.id === customerId
+          ? {
+              ...c,
+              status: 'bloque',
+              isBlocked: true,
+              blockedAt: new Date().toISOString(),
+              blockedReason: reason || "Compte temporairement bloqué par l'administrateur",
+            }
+          : c
+      )
+    );
+
+    if (currentUser && currentUser.id === customerId) {
+      setCurrentUser((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: 'bloque',
+              isBlocked: true,
+              blockedReason: reason || "Compte temporairement bloqué par l'administrateur",
+            }
+          : null
+      );
+    }
+
+    api.updateCustomer(customerId, {
+      status: 'bloque',
+      isBlocked: true,
+      blockedReason: reason || "Compte temporairement bloqué par l'administrateur",
+    }).catch(console.warn);
+  };
+
+  // Débloquer un compte client
+  const unblockCustomer = (customerId: string) => {
+    setCustomers((prev) =>
+      prev.map((c) =>
+        c.id === customerId
+          ? {
+              ...c,
+              status: 'valide',
+              isBlocked: false,
+              blockedAt: undefined,
+              blockedReason: undefined,
+            }
+          : c
+      )
+    );
+
+    if (currentUser && currentUser.id === customerId) {
+      setCurrentUser((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: 'valide',
+              isBlocked: false,
+              blockedReason: undefined,
+            }
+          : null
+      );
+    }
+
+    api.updateCustomer(customerId, {
+      status: 'valide',
+      isBlocked: false,
+    }).catch(console.warn);
+  };
+
+  // Supprimer définitivement un compte client
   const deleteCustomer = (customerId: string) => {
     setCustomers((prev) => prev.filter((c) => c.id !== customerId));
     if (currentUser && currentUser.id === customerId) {
@@ -692,12 +782,45 @@ Bonjour ${newCustomer.fullName}, votre compte client a été créé avec succès
     api.deleteCustomer(customerId).catch(console.warn);
   };
 
+  // Mise à jour du profil client (photo de profil avatar et localisation map)
+  const updateCustomerProfile = async (updates: {
+    avatar?: string;
+    location?: import('../types').CustomerLocation;
+    fullName?: string;
+    phone?: string;
+    city?: string;
+    address?: string;
+  }) => {
+    if (!currentUser) return;
+    const updatedCustomer: Customer = {
+      ...currentUser,
+      ...updates,
+    };
+    setCurrentUser(updatedCustomer);
+    setCustomers((prev) =>
+      prev.map((c) => (c.id === currentUser.id ? updatedCustomer : c))
+    );
+    try {
+      await api.updateCustomer(currentUser.id, updates);
+    } catch (e) {
+      console.warn('Erreur mise à jour profil client:', e);
+    }
+  };
+
   const loginWithPhone = (phoneInput: string): {
     success: boolean;
     status?: CustomerStatus;
     customer?: Customer;
     message: string;
   } => {
+    // Règle d'exclusivité : Si l'administrateur est déjà connecté, un client ne peut pas ouvrir son compte dans la même fenêtre
+    if (isAdmin) {
+      return {
+        success: false,
+        message: "Une session Administrateur est actuellement active. Veuillez d'abord vous déconnecter de l'administration pour ouvrir un compte client.",
+      };
+    }
+
     const cleanInput = phoneInput.replace(/[^0-9]/g, '');
     const found = customers.find((c) => {
       const cClean = c.phone.replace(/[^0-9]/g, '');
@@ -711,13 +834,13 @@ Bonjour ${newCustomer.fullName}, votre compte client a été créé avec succès
       };
     }
 
-    if (found.status === 'en_attente_validation') {
+    if (found.status === 'bloque' || found.isBlocked) {
       return {
         success: false,
-        status: 'en_attente_validation' as CustomerStatus,
+        status: 'bloque' as CustomerStatus,
         customer: found,
         message:
-          `Votre compte est en attente de validation par le gérant au numéro ${settings.companyPhone}. Envoyez le message de confirmation pour l'activer.`,
+          "Votre compte client a été temporairement suspendu par l'administrateur. Veuillez contacter le support pour réactiver votre accès.",
       };
     }
 
@@ -730,12 +853,18 @@ Bonjour ${newCustomer.fullName}, votre compte client a été créé avec succès
       };
     }
 
-    setCurrentUser(found);
+    // Le compte est actif immédiatement
+    const activeCustomer: Customer = {
+      ...found,
+      status: 'valide',
+      pendingVerification: false,
+    };
+    setCurrentUser(activeCustomer);
     return {
       success: true,
       status: 'valide' as CustomerStatus,
-      customer: found,
-      message: `Bienvenue ${found.fullName} ! Votre compte est validé.`,
+      customer: activeCustomer,
+      message: `Bienvenue ${activeCustomer.fullName} ! Votre compte est actif.`,
     };
   };
 
@@ -1017,6 +1146,11 @@ Bonjour ${newCustomer.fullName}, votre compte client a été créé avec succès
   const loginAdmin = (passwordOrPin: string) => {
     if (verifyAdminPassword(passwordOrPin)) {
       setIsAdmin(true);
+      // Règle d'exclusivité : Quand l'administrateur se connecte, toute session client dans le même angle est fermée
+      setCurrentUser(null);
+      try {
+        localStorage.removeItem(LOCAL_STORAGE_KEYS.CURRENT_USER);
+      } catch {}
       return true;
     }
     return false;
@@ -1080,7 +1214,10 @@ Bonjour ${newCustomer.fullName}, votre compte client a été créé avec succès
         registerCustomer,
         validateCustomer,
         rejectCustomer,
+        blockCustomer,
+        unblockCustomer,
         deleteCustomer,
+        updateCustomerProfile,
         loginWithPhone,
         logout,
         setCurrentUser,

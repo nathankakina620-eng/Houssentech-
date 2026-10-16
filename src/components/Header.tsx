@@ -24,6 +24,7 @@ import {
   ArrowRight,
   HelpCircle,
   Bell,
+  MapPin,
 } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
 import { PWAInstallButton } from './PWA/PWAInstallButton';
@@ -33,7 +34,8 @@ interface Props {
   onOpenLogin: () => void;
   onOpenRegister: () => void;
   onOpenChat: () => void;
-  onOpenTracking: (tab?: 'orders' | 'tracking' | 'chat' | 'faq') => void;
+  onOpenTracking: (tab?: 'orders' | 'tracking' | 'chat' | 'faq' | 'profile') => void;
+  onOpenProfile?: () => void;
   viewAngle: 'all' | 'stock' | 'order';
   onSetAngle: (angle: 'all' | 'stock' | 'order') => void;
   onOpenAdmin?: () => void;
@@ -45,6 +47,7 @@ export const Header: React.FC<Props> = ({
   onOpenRegister,
   onOpenChat,
   onOpenTracking,
+  onOpenProfile,
   viewAngle,
   onSetAngle,
   onOpenAdmin,
@@ -63,6 +66,7 @@ export const Header: React.FC<Props> = ({
     isAdmin,
     getWhatsAppUrl,
     pendingVerificationCustomersCount,
+    logoutAdmin,
   } = useStore();
 
   const inStockCount = products.filter((p) => p.availabilityType === 'en_stock' || p.stock > 0).length;
@@ -71,7 +75,7 @@ export const Header: React.FC<Props> = ({
   // Tiroir latéral gauche déclenché par les 3 traits (hamburger menu)
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
-  const handleOpenTrackingFromDrawer = (tab?: 'orders' | 'tracking' | 'chat' | 'faq') => {
+  const handleOpenTrackingFromDrawer = (tab?: 'orders' | 'tracking' | 'chat' | 'faq' | 'profile') => {
     setIsDrawerOpen(false);
     onOpenTracking(tab);
   };
@@ -118,7 +122,7 @@ export const Header: React.FC<Props> = ({
               aria-label="Ouvrir le menu principal à 3 traits"
             >
               <Menu className="w-5 h-5 text-red-500" />
-              {pendingVerificationCustomersCount > 0 && (
+              {isAdmin && pendingVerificationCustomersCount > 0 && (
                 <span className="absolute -top-1 -right-1 px-1.5 py-0.2 bg-amber-500 text-slate-950 rounded-full text-[9px] font-black animate-pulse shadow-md">
                   {pendingVerificationCustomersCount}
                 </span>
@@ -198,16 +202,46 @@ export const Header: React.FC<Props> = ({
               </span>
             </button>
 
-            {/* Indicateur de compte discret sur grand écran */}
-            {currentUser ? (
+            {/* Indicateur de session exclusif : Administrateur OU Client */}
+            {isAdmin ? (
+              <div className="flex items-center gap-2 bg-red-950/80 border border-red-600/50 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs shadow-md">
+                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0" />
+                <button
+                  onClick={onOpenAdmin}
+                  className="font-bold text-white hover:text-red-300 flex items-center gap-1.5 cursor-pointer"
+                  title="Ouvrir le tableau de bord administrateur"
+                >
+                  <span>👑 Admin</span>
+                  <span className="hidden sm:inline text-[10px] bg-red-900 text-red-200 px-1.5 py-0.5 rounded font-mono">HOUSSETECH</span>
+                </button>
+                <button
+                  onClick={logoutAdmin}
+                  className="text-red-400 hover:text-white p-0.5 rounded transition cursor-pointer"
+                  title="Déconnexion de la session administrateur"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ) : currentUser ? (
               <div className="hidden lg:flex items-center gap-2 bg-slate-900 dark:bg-slate-900 light:bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-800 dark:border-slate-800 light:border-slate-300 text-xs">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
-                <span className="font-semibold text-white dark:text-white light:text-slate-900 truncate max-w-[110px]">
-                  {currentUser.fullName}
-                </span>
+                <button
+                  type="button"
+                  onClick={onOpenProfile || (() => onOpenTracking('profile'))}
+                  className="flex items-center gap-2 hover:opacity-80 transition cursor-pointer"
+                  title="Modifier ma photo de profil & mon emplacement map"
+                >
+                  {currentUser.avatar ? (
+                    <img src={currentUser.avatar} alt={currentUser.fullName} className="w-5 h-5 rounded-full object-cover shrink-0 border border-emerald-500" />
+                  ) : (
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+                  )}
+                  <span className="font-semibold text-white dark:text-white light:text-slate-900 truncate max-w-[110px]">
+                    {currentUser.fullName}
+                  </span>
+                </button>
                 <button
                   onClick={logout}
-                  className="text-slate-400 hover:text-rose-400 ml-1 transition"
+                  className="text-slate-400 hover:text-rose-400 ml-1 transition cursor-pointer"
                   title="Déconnexion"
                 >
                   <LogOut className="w-3.5 h-3.5" />
@@ -230,15 +264,15 @@ export const Header: React.FC<Props> = ({
               </div>
             )}
 
-            {/* Notification en direct pour l'administrateur quand un client crée son compte depuis son téléphone */}
-            {pendingVerificationCustomersCount > 0 && onOpenAdmin && (
+            {/* Notification en direct : Visible UNIQUEMENT si l'administrateur est connecté */}
+            {isAdmin && pendingVerificationCustomersCount > 0 && onOpenAdmin && (
               <button
                 onClick={onOpenAdmin}
                 className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs shadow-md shadow-amber-500/30 transition animate-pulse cursor-pointer shrink-0"
-                title={`${pendingVerificationCustomersCount} client(s) en attente de validation`}
+                title={`${pendingVerificationCustomersCount} client(s) à consulter`}
               >
                 <Bell className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Validation</span>
+                <span className="hidden sm:inline">Clients</span>
                 <span className="px-1.5 py-0.2 bg-slate-950 text-amber-300 rounded-full text-[10px] font-black">
                   {pendingVerificationCustomersCount}
                 </span>
@@ -420,6 +454,18 @@ export const Header: React.FC<Props> = ({
                           Réponses Auto
                         </span>
                       </button>
+
+                      {/* Raccourci Paramètres Client : Photo de profil & Localisation Map */}
+                      <button
+                        onClick={() => handleOpenTrackingFromDrawer('profile')}
+                        className="w-full px-3 py-2 bg-slate-800 dark:bg-slate-800 light:bg-white hover:bg-slate-700 dark:hover:bg-slate-700 light:hover:bg-slate-100 rounded-xl border border-slate-700 dark:border-slate-700 light:border-slate-300 text-left text-xs font-semibold text-slate-200 dark:text-slate-200 light:text-slate-800 flex items-center justify-between transition cursor-pointer group"
+                      >
+                        <span className="flex items-center gap-2">
+                          <MapPin className="w-3.5 h-3.5 text-rose-400" />
+                          <span>Mon Profil & Localisation Map (GPS)</span>
+                        </span>
+                        <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:translate-x-0.5 transition-transform" />
+                      </button>
                     </div>
 
                     {/* Bouton principal : Ouvrir Mon Angle Client */}
@@ -444,6 +490,46 @@ export const Header: React.FC<Props> = ({
                       </button>
                     </div>
                   </div>
+                ) : isAdmin ? (
+                  /* SESSION ADMIN ACTIVE DANS LE MÊME ANGLE : Bloquer session client simultanée */
+                  <div className="p-4 rounded-2xl bg-red-950/40 border border-red-800/60 space-y-3">
+                    <div className="flex items-start gap-3">
+                      <div className="p-2.5 rounded-xl bg-red-600/20 border border-red-500/40 text-red-400 shrink-0 mt-0.5 font-bold text-sm">
+                        👑
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-white">
+                          Compte Administrateur Connecté
+                        </h4>
+                        <p className="text-[11px] text-red-200/80 mt-0.5 leading-relaxed">
+                          La session Administrateur HOUSSETECH est ouverte dans cette fenêtre. Un compte client ne peut pas être ouvert simultanément dans le même angle.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 pt-1">
+                      <button
+                        onClick={() => {
+                          setIsDrawerOpen(false);
+                          if (onOpenAdmin) onOpenAdmin();
+                        }}
+                        className="py-2.5 px-3 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-md shadow-red-600/30 cursor-pointer"
+                      >
+                        <span>Panneau Admin</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          logoutAdmin();
+                          setIsDrawerOpen(false);
+                        }}
+                        className="py-2.5 px-3 bg-slate-800 hover:bg-slate-700 text-rose-300 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <LogOut className="w-3.5 h-3.5" />
+                        <span>Déconnexion</span>
+                      </button>
+                    </div>
+                  </div>
                 ) : (
                   /* CARTE AVANT INSCRIPTION : Verrouillée avec incitation claire */
                   <div className="p-4 rounded-2xl bg-slate-900/90 dark:bg-slate-900/90 light:bg-slate-50 border border-slate-800 dark:border-slate-800 light:border-slate-300 space-y-3">
@@ -453,10 +539,10 @@ export const Header: React.FC<Props> = ({
                       </div>
                       <div>
                         <h4 className="text-xs font-bold text-white dark:text-white light:text-slate-900">
-                          Angle Client disponible dès inscription
+                          Angle Client activé dès inscription
                         </h4>
                         <p className="text-[11px] text-slate-400 dark:text-slate-400 light:text-slate-600 mt-1 leading-relaxed">
-                          Inscrivez-vous avec votre numéro de téléphone pour débloquer automatiquement votre Angle Client : suivi de vos colis vers Kinshasa, détails de vos articles acceptés par le gérant et messagerie privée directe.
+                          Inscrivez-vous directement : votre compte est actif immédiatement sans attente pour dialoguer avec la direction, commander et suivre vos pièces.
                         </p>
                       </div>
                     </div>
