@@ -21,6 +21,7 @@ import {
   ExternalLink,
   ShoppingBag,
   ArrowRight,
+  ArrowLeft,
   User,
   Lock,
   ImagePlus,
@@ -285,12 +286,24 @@ export const OrderTrackingModal: React.FC<Props> = ({
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onClose}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-bold transition shadow-sm cursor-pointer active:scale-95"
+              title="Quitter et revenir voir les articles sur la page d'accueil"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Quitter & voir les articles</span>
+              <span className="sm:hidden">Articles</span>
+              <ShoppingBag className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Barre de navigation interne de l'Espace Client avec FAQ Dynamique */}

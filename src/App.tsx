@@ -141,7 +141,7 @@ function StoreContent() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-950 dark:bg-slate-950 light:bg-slate-50 text-slate-100 dark:text-slate-100 light:text-slate-900 transition-colors pb-16 sm:pb-8">
+    <div className="min-h-screen flex flex-col bg-slate-950 dark:bg-slate-950 light:bg-slate-50 text-slate-100 dark:text-slate-100 light:text-slate-900 transition-colors pb-28 sm:pb-8">
       {/* Header */}
       <Header
         onOpenCart={() => setIsCartOpen(true)}
@@ -476,8 +476,7 @@ function StoreContent() {
         )}
       </main>
 
-      {/* Footer avec accès administrateur discret tout en bas de page (invisible aux clients ordinaires) */}
-      <footer className="mt-12 bg-slate-900 dark:bg-slate-900 light:bg-white border-t border-slate-800 dark:border-slate-800 light:border-slate-200 py-6 text-xs text-slate-400">
+      <footer className="mt-12 bg-slate-900 dark:bg-slate-900 light:bg-white border-t border-slate-800 dark:border-slate-800 light:border-slate-200 pt-6 pb-24 sm:pb-8 text-xs text-slate-400">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 space-y-4">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-2">

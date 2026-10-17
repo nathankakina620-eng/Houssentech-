@@ -20,6 +20,7 @@ import {
 } from '../data/initialData';
 import { computeShippingSchedule } from '../utils/shippingSchedule';
 import { api } from '../services/api';
+import { firestoreService } from '../services/firestoreService';
 
 export interface ServerNotification {
   id: string;
@@ -351,24 +352,50 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   // Synchronisation continue et automatique avec la base de données centrale du serveur
+  // Synchronisation continue et automatique avec Firestore et le serveur central
   // Permet à tous les téléphones (clients et administrateur) d'être synchronisés en temps réel
   const syncWithServer = async () => {
     try {
-      const data = await api.sync();
-      if (!data) return;
+      // 1. Requête directe synchronisée vers Cloud Firestore (temps réel absolu multi-appareils)
+      let firestoreCustomers: Customer[] = [];
+      try {
+        firestoreCustomers = await firestoreService.getCustomers();
+      } catch (fErr) {
+        console.warn('[Firestore] Erreur requête synchronisée directe:', fErr);
+      }
 
-      if (Array.isArray(data.customers)) {
-        // Normalisation stricte de pendingVerification
-        const normalizedCustomers: Customer[] = data.customers.map((c) => ({
-          ...c,
-          pendingVerification: c.status === 'en_attente_validation' ? true : false,
-        }));
+      // 2. Requête vers le serveur d'appoint
+      const data = await api.sync().catch(() => null);
 
-        setCustomers(normalizedCustomers);
+      const customerMap = new Map<string, Customer>();
+
+      // Insérer les clients du serveur local
+      if (data && Array.isArray(data.customers)) {
+        data.customers.forEach((c) => {
+          customerMap.set(c.id, {
+            ...c,
+            status: c.status === 'bloque' || c.isBlocked ? 'bloque' : 'valide',
+            isBlocked: c.status === 'bloque' || Boolean(c.isBlocked),
+            pendingVerification: false,
+          });
+        });
+      }
+
+      // Fusionner avec les clients Cloud Firestore (prioritaires et universels)
+      if (Array.isArray(firestoreCustomers) && firestoreCustomers.length > 0) {
+        firestoreCustomers.forEach((fc) => {
+          customerMap.set(fc.id, fc);
+        });
+      }
+
+      const mergedCustomers = Array.from(customerMap.values());
+      if (mergedCustomers.length > 0) {
+        mergedCustomers.sort((a, b) => (b.registeredAt || '').localeCompare(a.registeredAt || ''));
+        setCustomers(mergedCustomers);
 
         // Détection instantanée des nouveaux comptes clients créés (visible UNIQUEMENT si l'administrateur est connecté)
         if (!isFirstSyncRef.current && isAdmin) {
-          const newlyAdded = normalizedCustomers.find((c) => !previousPendingIdsRef.current.has(c.id));
+          const newlyAdded = mergedCustomers.find((c) => !previousPendingIdsRef.current.has(c.id));
           if (newlyAdded) {
             playNotificationChime();
             setNewCustomerToast({
@@ -378,11 +405,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           }
         }
         isFirstSyncRef.current = false;
-        previousPendingIdsRef.current = new Set(normalizedCustomers.map((c) => c.id));
+        previousPendingIdsRef.current = new Set(mergedCustomers.map((c) => c.id));
 
-        // Si l'utilisateur actuel est connecté, mettre à jour son statut en direct (ex: validation admin)
+        // Si l'utilisateur actuel est connecté, mettre à jour son profil en direct
         if (currentUser) {
-          const fresh = normalizedCustomers.find(
+          const fresh = mergedCustomers.find(
             (c) =>
               c.id === currentUser.id ||
               c.phone.replace(/[^0-9]/g, '') === currentUser.phone.replace(/[^0-9]/g, '')
@@ -393,24 +420,22 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
       }
 
-      if (Array.isArray(data.orders)) {
-        setOrders(data.orders);
-      }
-
-      if (Array.isArray(data.chatMessages)) {
-        setChatMessages(data.chatMessages);
-      }
-
-      if (data.settings) {
-        setSettings(data.settings);
-      }
-
-      if (Array.isArray(data.products) && data.products.length > 0) {
-        setProducts(data.products);
-      }
-
-      if (Array.isArray(data.notifications)) {
-        setNotifications(data.notifications);
+      if (data) {
+        if (Array.isArray(data.orders)) {
+          setOrders(data.orders);
+        }
+        if (Array.isArray(data.chatMessages)) {
+          setChatMessages(data.chatMessages);
+        }
+        if (data.settings) {
+          setSettings(data.settings);
+        }
+        if (Array.isArray(data.products) && data.products.length > 0) {
+          setProducts(data.products);
+        }
+        if (Array.isArray(data.notifications)) {
+          setNotifications(data.notifications);
+        }
       }
     } catch (err) {
       console.warn('[Sync with Server] Erreur:', err);
@@ -418,15 +443,80 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   useEffect(() => {
-    // 1. Synchronisation immédiate à l'ouverture de l'application
+    // 1. Amorçage initial Firestore si nécessaire
+    firestoreService.seedInitialDataIfNeeded();
+
+    // 2. Synchronisation temps réel Firestore multi-appareils (Clients instantanés sur téléphone Admin)
+    const unsubCustomers = firestoreService.subscribeCustomers((freshCustomers) => {
+      if (freshCustomers && freshCustomers.length > 0) {
+        setCustomers((prev) => {
+          const map = new Map<string, Customer>();
+          prev.forEach((c) => map.set(c.id, c));
+          freshCustomers.forEach((c) => map.set(c.id, c));
+          const list = Array.from(map.values());
+          list.sort((a, b) => (b.registeredAt || '').localeCompare(a.registeredAt || ''));
+          return list;
+        });
+
+        // Alerte immédiate de l'administrateur si un nouveau client s'inscrit sur un autre téléphone
+        if (!isFirstSyncRef.current && isAdmin) {
+          const newlyAdded = freshCustomers.find((c) => !previousPendingIdsRef.current.has(c.id));
+          if (newlyAdded) {
+            playNotificationChime();
+            setNewCustomerToast({
+              customer: newlyAdded,
+              message: `Nouveau compte client créé par ${newlyAdded.fullName} (${newlyAdded.phone}) ! Compte actif.`,
+            });
+          }
+        }
+        isFirstSyncRef.current = false;
+        previousPendingIdsRef.current = new Set(freshCustomers.map((c) => c.id));
+
+        if (currentUser) {
+          const fresh = freshCustomers.find(
+            (c) =>
+              c.id === currentUser.id ||
+              c.phone.replace(/[^0-9]/g, '') === currentUser.phone.replace(/[^0-9]/g, '')
+          );
+          if (fresh && (fresh.status !== currentUser.status || fresh.notes !== currentUser.notes)) {
+            setCurrentUser(fresh);
+          }
+        }
+      }
+    });
+
+    const unsubOrders = firestoreService.subscribeOrders((freshOrders) => {
+      if (freshOrders && freshOrders.length > 0) {
+        setOrders(freshOrders);
+      }
+    });
+
+    const unsubChat = firestoreService.subscribeChatMessages((freshMessages) => {
+      if (freshMessages && freshMessages.length > 0) {
+        setChatMessages(freshMessages);
+      }
+    });
+
+    const unsubSettings = firestoreService.subscribeSettings((freshSettings) => {
+      if (freshSettings) {
+        setSettings(freshSettings);
+      }
+    });
+
+    const unsubProducts = firestoreService.subscribeProducts((freshProducts) => {
+      if (freshProducts && freshProducts.length > 0) {
+        setProducts(freshProducts);
+      }
+    });
+
+    // 3. Synchronisation immédiate avec le serveur local en parallèle
     syncWithServer();
 
-    // 2. Polling régulier toutes les 3 secondes pour notifier instantanément l'administrateur
+    // 4. Polling périodique de sécurité (toutes les 4 secondes)
     const intervalId = setInterval(() => {
       syncWithServer();
-    }, 3000);
+    }, 4000);
 
-    // 3. Synchronisation quand l'utilisateur revient sur la page ou clique
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
         syncWithServer();
@@ -436,11 +526,16 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
+      unsubCustomers();
+      unsubOrders();
+      unsubChat();
+      unsubSettings();
+      unsubProducts();
       clearInterval(intervalId);
       window.removeEventListener('focus', syncWithServer);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [currentUser?.id]);
+  }, [isAdmin, currentUser?.id]);
 
   // Derived cart calculations
   const cartTotal = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
@@ -637,7 +732,17 @@ Bonjour ${newCustomer.fullName}, votre compte client a été créé et activé a
     const whatsappUrl = `https://wa.me/${cleanCompanyPhone}?text=${encodedMessage}`;
     const smsUrl = `sms:${settings.companyPhone}?body=${encodedMessage}`;
 
-    // Envoi immédiat au serveur central
+    // 1. Sauvegarde instantanée en base Cloud Firestore (visible immédiatement sur le téléphone Administrateur)
+    firestoreService.saveCustomer(newCustomer).catch((err) => {
+      console.warn('[Firestore] Note sauvegarde client:', err);
+    });
+
+    // Sauvegarde instantanée du message d'accueil officiel dans Firestore
+    firestoreService.sendChatMessage(officialWelcomeMsg).catch((err) => {
+      console.warn('[Firestore] Note sauvegarde message d accueil:', err);
+    });
+
+    // 2. Envoi en parallèle au serveur central
     api.registerCustomer({
       fullName,
       phone,
@@ -736,6 +841,13 @@ Bonjour ${newCustomer.fullName}, votre compte client a été créé et activé a
       isBlocked: true,
       blockedReason: reason || "Compte temporairement bloqué par l'administrateur",
     }).catch(console.warn);
+
+    firestoreService.updateCustomer(customerId, {
+      status: 'bloque',
+      isBlocked: true,
+      blockedAt: new Date().toISOString(),
+      blockedReason: reason || "Compte temporairement bloqué par l'administrateur",
+    }).catch((err) => console.warn('[Firestore] Note blockCustomer:', err));
   };
 
   // Débloquer un compte client
@@ -771,6 +883,11 @@ Bonjour ${newCustomer.fullName}, votre compte client a été créé et activé a
       status: 'valide',
       isBlocked: false,
     }).catch(console.warn);
+
+    firestoreService.updateCustomer(customerId, {
+      status: 'valide',
+      isBlocked: false,
+    }).catch((err) => console.warn('[Firestore] Note unblockCustomer:', err));
   };
 
   // Supprimer définitivement un compte client
@@ -780,6 +897,7 @@ Bonjour ${newCustomer.fullName}, votre compte client a été créé et activé a
       setCurrentUser(null);
     }
     api.deleteCustomer(customerId).catch(console.warn);
+    firestoreService.deleteCustomer(customerId).catch((err) => console.warn('[Firestore] Note deleteCustomer:', err));
   };
 
   // Mise à jour du profil client (photo de profil avatar et localisation map)
@@ -802,6 +920,7 @@ Bonjour ${newCustomer.fullName}, votre compte client a été créé et activé a
     );
     try {
       await api.updateCustomer(currentUser.id, updates);
+      await firestoreService.updateCustomer(currentUser.id, updates);
     } catch (e) {
       console.warn('Erreur mise à jour profil client:', e);
     }
@@ -936,7 +1055,8 @@ Bonjour ${newCustomer.fullName}, votre compte client a été créé et activé a
 
     setOrders((prev) => [newOrder, ...prev]);
 
-    // Envoi de la commande à la base de données centrale pour affichage immédiat chez l'administrateur
+    // Envoi de la commande à Firestore (temps réel) et à l'API locale
+    firestoreService.saveOrder(newOrder).catch((err) => console.warn('[Firestore] Note saveOrder:', err));
     api.createOrder(newOrder).catch((err) => console.warn('Erreur envoi commande serveur:', err));
 
     cart.forEach((item) => {
@@ -984,8 +1104,9 @@ Bonjour ${newCustomer.fullName}, votre compte client a été créé et activé a
       })
     );
 
-    // Synchronisation serveur
+    // Synchronisation serveur & Firestore
     if (acceptedOrderObj) {
+      firestoreService.saveOrder(acceptedOrderObj).catch(console.warn);
       api.updateOrder(orderId, {
         adminDecision: 'acceptee',
         status: acceptedOrderObj.status,
@@ -1010,45 +1131,67 @@ Bonjour ${newCustomer.fullName}, votre compte client a été créé et activé a
 
   const rejectOrder = (orderId: string, reason?: string) => {
     const finalReason = reason || 'Article indisponible ou acompte non conforme.';
+    let rejectedObj: Order | undefined;
     setOrders((prev) =>
-      prev.map((o) =>
-        o.id === orderId
-          ? {
-              ...o,
-              adminDecision: 'refusee',
-              status: 'refusee',
-              adminDecisionReason: finalReason,
-            }
-          : o
-      )
+      prev.map((o) => {
+        if (o.id === orderId) {
+          rejectedObj = {
+            ...o,
+            adminDecision: 'refusee',
+            status: 'refusee',
+            adminDecisionReason: finalReason,
+          };
+          return rejectedObj;
+        }
+        return o;
+      })
     );
     api.updateOrder(orderId, {
       adminDecision: 'refusee',
       status: 'refusee',
       adminDecisionReason: finalReason,
     }).catch(console.warn);
+    if (rejectedObj) {
+      firestoreService.saveOrder(rejectedObj).catch(console.warn);
+    }
   };
 
   const updateOrderTracking = (orderId: string, step: OrderTrackingStep) => {
+    let updatedOrd: Order | undefined;
     setOrders((prev) =>
-      prev.map((o) => (o.id === orderId ? { ...o, status: step } : o))
+      prev.map((o) => {
+        if (o.id === orderId) {
+          updatedOrd = { ...o, status: step };
+          return updatedOrd;
+        }
+        return o;
+      })
     );
     api.updateOrder(orderId, { status: step }).catch(console.warn);
+    if (updatedOrd) {
+      firestoreService.saveOrder(updatedOrd).catch(console.warn);
+    }
   };
 
   const markDepositPaid = (orderId: string) => {
+    let paidOrd: Order | undefined;
     setOrders((prev) =>
-      prev.map((o) =>
-        o.id === orderId
-          ? {
-              ...o,
-              isDepositPaid: true,
-              depositPaidAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
-              status: o.status === 'en_attente_acompte' ? 'acompte_recu' : o.status,
-            }
-          : o
-      )
+      prev.map((o) => {
+        if (o.id === orderId) {
+          paidOrd = {
+            ...o,
+            isDepositPaid: true,
+            depositPaidAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
+            status: o.status === 'en_attente_acompte' ? 'acompte_recu' : o.status,
+          };
+          return paidOrd;
+        }
+        return o;
+      })
     );
+    if (paidOrd) {
+      firestoreService.saveOrder(paidOrd).catch(console.warn);
+    }
     api.updateOrder(orderId, {
       isDepositPaid: true,
       depositPaidAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
@@ -1095,7 +1238,10 @@ Bonjour ${newCustomer.fullName}, votre compte client a été créé et activé a
 
     setChatMessages((prev) => [...prev, newMsg]);
 
-    // Envoi au serveur central pour que l'autre partie (admin ou client sur son téléphone) reçoive le message et les photos
+    // Envoi instantané dans Firestore pour affichage temps réel sur tous les téléphones
+    firestoreService.sendChatMessage(newMsg).catch((err) => console.warn('[Firestore] Note chat:', err));
+
+    // Envoi au serveur central en parallèle
     api.sendChatMessage({
       customerId: custId,
       customerName: custName,
@@ -1119,8 +1265,10 @@ Bonjour ${newCustomer.fullName}, votre compte client a été créé et activé a
 
   // Settings & Admin
   const updateSettings = (newSettings: Partial<StoreSettings>) => {
-    setSettings((prev) => ({ ...prev, ...newSettings }));
+    const updated = { ...settings, ...newSettings };
+    setSettings(updated);
     api.updateSettings(newSettings).catch(console.warn);
+    firestoreService.updateSettings(updated).catch(console.warn);
   };
 
   const updateAdminPassword = (newPassword: string) => {

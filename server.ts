@@ -91,6 +91,21 @@ function loadDatabase(): DatabaseSchema {
 
 let db: DatabaseSchema = loadDatabase();
 
+function getDatabase(): DatabaseSchema {
+  try {
+    if (fs.existsSync(DB_FILE)) {
+      const content = fs.readFileSync(DB_FILE, 'utf-8');
+      const parsed = JSON.parse(content);
+      if (parsed && Array.isArray(parsed.customers)) {
+        db = parsed;
+      }
+    }
+  } catch (err) {
+    console.error('Erreur lecture DB_FILE:', err);
+  }
+  return db;
+}
+
 function saveDatabase(dataToSave: DatabaseSchema) {
   try {
     dataToSave.lastUpdated = new Date().toISOString();
@@ -126,31 +141,34 @@ async function startServer() {
 
   // 1. Health check
   app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString(), customersCount: db.customers.length });
+    const currentDb = getDatabase();
+    res.json({ status: 'ok', timestamp: new Date().toISOString(), customersCount: currentDb.customers.length });
   });
 
   // 2. Full Sync (Appelé régulièrement par chaque client & admin)
   app.get('/api/sync', (req, res) => {
+    const currentDb = getDatabase();
     res.json({
-      customers: db.customers.map((c) => ({
+      customers: currentDb.customers.map((c) => ({
         ...c,
         status: c.status === 'bloque' || c.isBlocked ? 'bloque' : 'valide',
         isBlocked: c.status === 'bloque' || Boolean(c.isBlocked),
         pendingVerification: false,
       })),
-      orders: db.orders,
-      chatMessages: db.chatMessages,
-      settings: db.settings,
-      products: db.products,
-      notifications: db.notifications,
-      lastUpdated: db.lastUpdated,
+      orders: currentDb.orders,
+      chatMessages: currentDb.chatMessages,
+      settings: currentDb.settings,
+      products: currentDb.products,
+      notifications: currentDb.notifications,
+      lastUpdated: currentDb.lastUpdated,
     });
   });
 
   // 3. Customers API
   app.get('/api/customers', (req, res) => {
+    const currentDb = getDatabase();
     res.json(
-      db.customers.map((c) => ({
+      currentDb.customers.map((c) => ({
         ...c,
         status: c.status === 'bloque' || c.isBlocked ? 'bloque' : 'valide',
         isBlocked: c.status === 'bloque' || Boolean(c.isBlocked),

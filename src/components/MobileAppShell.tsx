@@ -33,94 +33,89 @@ export const MobileAppShell: React.FC<Props> = ({
         href={getWhatsAppUrl(`Bonjour HOUSSETECH (${settings.companyPhone}), je vous contacte depuis l'application.`)}
         target="_blank"
         rel="noopener noreferrer"
-        className="fixed bottom-20 right-4 z-40 p-3.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-full shadow-2xl shadow-emerald-900/40 flex items-center justify-center transition transform active:scale-95 group"
+        className="fixed bottom-[calc(4.8rem+env(safe-area-inset-bottom,0px))] right-3.5 z-40 p-3.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-full shadow-2xl shadow-emerald-950/60 flex items-center justify-center transition transform active:scale-95 group border-2 border-emerald-400/40"
         title="Contacter le gérant sur WhatsApp (+243900042404)"
       >
-        <MessageCircle className="w-6 h-6" />
+        <MessageCircle className="w-5 h-5 sm:w-6 sm:h-6" />
         <span className="hidden sm:inline-block max-w-0 overflow-hidden whitespace-nowrap group-hover:max-w-xs transition-all duration-300 group-hover:ml-2 text-xs font-bold">
           WhatsApp HOUSSETECH
         </span>
       </a>
 
-      {/* Mobile Bottom Navigation Bar: Stock, Message, Application, Panier bien disposés */}
-      <nav className="sm:hidden fixed bottom-0 inset-x-0 z-40 bg-slate-900/95 dark:bg-slate-900/95 light:bg-white/95 backdrop-blur-md border-t border-slate-800 dark:border-slate-800 light:border-slate-200 px-1.5 py-1.5 grid grid-cols-6 items-center text-center shadow-lg">
+      {/* Mobile Bottom Navigation Bar: Ergonomique, 5 onglets spacieux adaptés à tout écran de téléphone */}
+      <nav className="sm:hidden fixed bottom-0 inset-x-0 z-40 bg-slate-900/95 dark:bg-slate-900/95 light:bg-white/95 backdrop-blur-md border-t border-slate-800 dark:border-slate-800 light:border-slate-200 px-2 pt-2 pb-[max(0.6rem,env(safe-area-inset-bottom))] grid grid-cols-5 items-center text-center shadow-2xl">
         {/* 1. Accueil */}
         <button
           onClick={() => {
             onNavigateHome();
             onSetAngle('all');
           }}
-          className={`flex flex-col items-center justify-center gap-0.5 p-1 transition ${
-            viewAngle === 'all' ? 'text-red-500 font-bold' : 'text-slate-400 hover:text-white'
+          className={`flex flex-col items-center justify-center gap-1 p-1 transition cursor-pointer active:scale-95 ${
+            viewAngle === 'all' ? 'text-red-500 font-black' : 'text-slate-400 hover:text-white'
           }`}
           title="Accueil boutique"
         >
           <Home className="w-4 h-4 text-red-500" />
-          <span className="text-[10px] font-semibold">Accueil</span>
+          <span className="text-[10px] font-semibold leading-none">Accueil</span>
         </button>
 
         {/* 2. STOCK : DISPOSITION PRIORITAIRE */}
         <button
           onClick={() => onSetAngle(viewAngle === 'stock' ? 'all' : 'stock')}
-          className={`flex flex-col items-center justify-center gap-0.5 p-1 transition ${
-            viewAngle === 'stock' ? 'text-emerald-400 font-bold scale-105' : 'text-slate-400 hover:text-white'
+          className={`flex flex-col items-center justify-center gap-1 p-1 transition cursor-pointer active:scale-95 ${
+            viewAngle === 'stock' ? 'text-emerald-400 font-black scale-105' : 'text-slate-400 hover:text-white'
           }`}
           title="Pièces en stock immédiat"
         >
           <div className="relative">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 absolute -top-0.5 -right-1 animate-pulse" />
-            <span className="text-xs font-black">📦</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 absolute -top-0.5 -right-1.5 animate-pulse" />
+            <span className="text-xs">📦</span>
           </div>
-          <span className="text-[10px] font-bold text-emerald-400">Stock</span>
+          <span className="text-[10px] font-bold text-emerald-400 leading-none">Stock</span>
         </button>
 
-        {/* 3. MESSAGE : CHAT SITE DIRECT */}
-        <button
-          onClick={onOpenChat}
-          className="relative flex flex-col items-center justify-center gap-0.5 p-1 text-slate-400 hover:text-white transition"
-          title="Discussion directe avec le gérant"
-        >
-          <div className="relative">
-            <MessageSquare className="w-4 h-4 text-red-400" />
-            {unreadMessagesCount > 0 && (
-              <span className="absolute -top-1.5 -right-2 px-1 py-0.2 bg-red-600 text-white rounded-full text-[9px] font-black animate-pulse">
-                {unreadMessagesCount}
-              </span>
-            )}
-          </div>
-          <span className="text-[10px] font-semibold text-slate-300">Message</span>
-        </button>
-
-        {/* 4. APPLICATION : PWA INSTALL DISPOSITION */}
-        <div className="flex flex-col items-center justify-center">
-          <PWAInstallButton variant="mobile_nav" />
-        </div>
-
-        {/* 5. PANIER : COMMANDE & ACOMPTE */}
+        {/* 3. PANIER : COMMANDE & ACOMPTE */}
         <button
           onClick={onOpenCart}
-          className="relative flex flex-col items-center justify-center gap-0.5 p-1 text-slate-400 hover:text-white transition"
+          className="relative flex flex-col items-center justify-center gap-1 p-1 text-slate-400 hover:text-white transition cursor-pointer active:scale-95"
           title="Mon panier d'achats"
         >
           <div className="relative">
             <ShoppingBag className="w-4 h-4 text-red-500" />
             {cartItemsCount > 0 && (
-              <span className="absolute -top-1.5 -right-2 px-1.5 py-0.2 bg-red-600 text-white rounded-full text-[9px] font-black">
+              <span className="absolute -top-1.5 -right-2.5 px-1.5 py-0.2 bg-red-600 text-white rounded-full text-[9px] font-black shadow-sm">
                 {cartItemsCount}
               </span>
             )}
           </div>
-          <span className="text-[10px] font-semibold text-slate-300">Panier</span>
+          <span className="text-[10px] font-semibold text-slate-300 leading-none">Panier</span>
         </button>
 
-        {/* 6. MON ANGLE : COLIS, ARTICLES & CHAT GÉRANT */}
+        {/* 4. MESSAGE : CHAT SITE DIRECT */}
+        <button
+          onClick={onOpenChat}
+          className="relative flex flex-col items-center justify-center gap-1 p-1 text-slate-400 hover:text-white transition cursor-pointer active:scale-95"
+          title="Discussion directe avec le gérant"
+        >
+          <div className="relative">
+            <MessageSquare className="w-4 h-4 text-amber-400" />
+            {unreadMessagesCount > 0 && (
+              <span className="absolute -top-1.5 -right-2.5 px-1.5 py-0.2 bg-red-600 text-white rounded-full text-[9px] font-black animate-pulse shadow-sm">
+                {unreadMessagesCount}
+              </span>
+            )}
+          </div>
+          <span className="text-[10px] font-semibold text-slate-300 leading-none">Message</span>
+        </button>
+
+        {/* 5. MON ANGLE : COLIS, ARTICLES, PROFIL & MAP */}
         <button
           onClick={onOpenTracking}
-          className="flex flex-col items-center justify-center gap-0.5 p-1 text-slate-400 hover:text-white transition"
-          title="Mon Angle Client : Articles commandés, Suivi de colis & Conversation"
+          className="flex flex-col items-center justify-center gap-1 p-1 text-slate-400 hover:text-white transition cursor-pointer active:scale-95"
+          title="Mon Angle Client : Articles commandés, Suivi de colis, Paramètres & Map"
         >
-          <Truck className="w-4 h-4 text-red-400" />
-          <span className="text-[10px] font-semibold text-slate-300">Mon Angle</span>
+          <Truck className="w-4 h-4 text-rose-400" />
+          <span className="text-[10px] font-semibold text-slate-300 leading-none">Mon Angle</span>
         </button>
       </nav>
     </>

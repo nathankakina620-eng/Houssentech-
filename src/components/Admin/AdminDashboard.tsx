@@ -106,6 +106,7 @@ export const AdminDashboard: React.FC<{ onClose: () => void }> = ({ onClose }) =
     updateSettings,
     logoutAdmin,
     resetToDefaultData,
+    refreshData,
   } = useStore();
 
   // Tabs: added 'stocks'
@@ -146,6 +147,8 @@ export const AdminDashboard: React.FC<{ onClose: () => void }> = ({ onClose }) =
   // Search & filter for products tab
   const [productSearch, setProductSearch] = useState('');
   const [customerFilter, setCustomerFilter] = useState<'all' | 'active' | 'blocked'>('all');
+  const [customerSearchText, setCustomerSearchText] = useState('');
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [orderFilter, setOrderFilter] = useState<string>('all');
 
   // Chat in admin state
@@ -432,11 +435,22 @@ export const AdminDashboard: React.FC<{ onClose: () => void }> = ({ onClose }) =
 
   const activeCustomers = customers.filter((c) => c.status !== 'bloque' && !c.isBlocked);
   const blockedCustomers = customers.filter((c) => c.status === 'bloque' || c.isBlocked);
-  const filteredCustomers = customers.filter((c) => {
-    if (customerFilter === 'active') return c.status !== 'bloque' && !c.isBlocked;
-    if (customerFilter === 'blocked') return c.status === 'bloque' || c.isBlocked;
-    return true;
-  });
+  const filteredCustomers = customers
+    .filter((c) => {
+      if (customerFilter === 'active') return c.status !== 'bloque' && !c.isBlocked;
+      if (customerFilter === 'blocked') return c.status === 'bloque' || c.isBlocked;
+      return true;
+    })
+    .filter((c) => {
+      if (!customerSearchText.trim()) return true;
+      const q = customerSearchText.toLowerCase();
+      return (
+        c.fullName.toLowerCase().includes(q) ||
+        c.phone.toLowerCase().includes(q) ||
+        c.city.toLowerCase().includes(q) ||
+        (c.address && c.address.toLowerCase().includes(q))
+      );
+    });
 
   const pendingApprovalOrders = orders.filter((o) => o.status === 'en_attente_approbation');
   const filteredOrders = orders.filter((o) => {
@@ -473,16 +487,42 @@ export const AdminDashboard: React.FC<{ onClose: () => void }> = ({ onClose }) =
           </div>
         </div>
 
-        <button
-          onClick={() => {
-            logoutAdmin();
-            onClose();
-          }}
-          className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 flex items-center gap-1.5 transition"
-        >
-          <LogOut className="w-4 h-4 text-red-400" />
-          <span className="hidden sm:inline">Quitter Mode Admin</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Badge de synchronisation Cloud Firestore temps réel */}
+          <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-950/70 border border-emerald-500/40 text-emerald-300 text-[10px] font-bold shadow-xs">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span>Base Cloud En Direct</span>
+          </div>
+
+          {/* Bouton pour forcer le rafraîchissement immédiat de tous les téléphones */}
+          <button
+            onClick={async () => {
+              setIsRefreshing(true);
+              try {
+                await refreshData();
+              } finally {
+                setTimeout(() => setIsRefreshing(false), 600);
+              }
+            }}
+            disabled={isRefreshing}
+            className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 hover:text-white flex items-center gap-1.5 transition active:scale-95 cursor-pointer border border-slate-700"
+            title="Rafraîchir immédiatement toutes les données (clients, commandes, stock)"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-emerald-400 ${isRefreshing ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">Actualiser</span>
+          </button>
+
+          <button
+            onClick={() => {
+              logoutAdmin();
+              onClose();
+            }}
+            className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 flex items-center gap-1.5 transition cursor-pointer"
+          >
+            <LogOut className="w-4 h-4 text-red-400" />
+            <span className="hidden sm:inline">Quitter Mode Admin</span>
+          </button>
+        </div>
       </header>
 
       {/* Tabs Bar with dedicated "STOCK" Angle */}
@@ -1326,34 +1366,63 @@ export const AdminDashboard: React.FC<{ onClose: () => void }> = ({ onClose }) =
                   <span>Gestion des Comptes Clients & Emplacement Map</span>
                 </h2>
                 <p className="text-xs text-slate-400">
-                  Les comptes sont activés directement. Vous pouvez bloquer temporairement un compte ou le supprimer définitivement pour de bon.
+                  Les comptes sont activés directement. Synchronisation temps réel sur tous les téléphones.
                 </p>
               </div>
 
-              <div className="flex bg-slate-800 p-1 rounded-xl border border-slate-700 text-xs">
+              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                {/* Recherche rapide client */}
+                <div className="relative flex-1 sm:w-56">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Rechercher nom, tél..."
+                    value={customerSearchText}
+                    onChange={(e) => setCustomerSearchText(e.target.value)}
+                    className="w-full pl-8 pr-3 py-1.5 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-400 focus:outline-hidden focus:border-red-500"
+                  />
+                </div>
+
+                <div className="flex bg-slate-800 p-1 rounded-xl border border-slate-700 text-xs shrink-0">
+                  <button
+                    onClick={() => setCustomerFilter('all')}
+                    className={`px-2.5 py-1.5 rounded-lg font-bold transition cursor-pointer ${
+                      customerFilter === 'all' ? 'bg-slate-700 text-white shadow-xs' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Tous ({customers.length})
+                  </button>
+                  <button
+                    onClick={() => setCustomerFilter('active')}
+                    className={`px-2.5 py-1.5 rounded-lg font-bold transition cursor-pointer ${
+                      customerFilter === 'active' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Actifs ({activeCustomers.length})
+                  </button>
+                  <button
+                    onClick={() => setCustomerFilter('blocked')}
+                    className={`px-2.5 py-1.5 rounded-lg font-bold transition cursor-pointer ${
+                      customerFilter === 'blocked' ? 'bg-red-600 text-white shadow-xs' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Bloqués ({blockedCustomers.length})
+                  </button>
+                </div>
+
                 <button
-                  onClick={() => setCustomerFilter('all')}
-                  className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer ${
-                    customerFilter === 'all' ? 'bg-slate-700 text-white shadow-xs' : 'text-slate-400 hover:text-white'
-                  }`}
+                  onClick={async () => {
+                    setIsRefreshing(true);
+                    try {
+                      await refreshData();
+                    } finally {
+                      setTimeout(() => setIsRefreshing(false), 500);
+                    }
+                  }}
+                  className="p-2 bg-slate-800 hover:bg-slate-700 text-emerald-400 rounded-xl border border-slate-700 transition cursor-pointer active:scale-95 shrink-0"
+                  title="Actualiser la liste des clients"
                 >
-                  Tous ({customers.length})
-                </button>
-                <button
-                  onClick={() => setCustomerFilter('active')}
-                  className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer ${
-                    customerFilter === 'active' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  Actifs ({activeCustomers.length})
-                </button>
-                <button
-                  onClick={() => setCustomerFilter('blocked')}
-                  className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer ${
-                    customerFilter === 'blocked' ? 'bg-red-600 text-white shadow-xs' : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  Bloqués ({blockedCustomers.length})
+                  <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
                 </button>
               </div>
             </div>

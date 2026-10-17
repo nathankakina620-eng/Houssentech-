@@ -1,0 +1,102 @@
+{
+  "entities": {
+    "Customer": {
+      "title": "Customer",
+      "description": "Compte client HOUSSETECH moto",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "fullName": { "type": "string" },
+        "phone": { "type": "string" },
+        "city": { "type": "string" },
+        "address": { "type": "string" },
+        "avatar": { "type": "string" },
+        "status": { "type": "string", "enum": ["valide", "bloque", "en_attente_validation", "rejete"] },
+        "registeredAt": { "type": "string" },
+        "validatedAt": { "type": "string" },
+        "validationCode": { "type": "string" },
+        "isBlocked": { "type": "boolean" },
+        "blockedReason": { "type": "string" },
+        "notes": { "type": "string" }
+      },
+      "required": ["id", "fullName", "phone", "city", "status"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Commande de pièces moto",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "orderNumber": { "type": "string" },
+        "customerId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "customerPhone": { "type": "string" },
+        "status": { "type": "string" },
+        "totalAmount": { "type": "number" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "orderNumber", "customerName", "customerPhone", "totalAmount"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "Message de conversation en direct client-administrateur",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "customerId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "customerPhone": { "type": "string" },
+        "sender": { "type": "string", "enum": ["admin", "client"] },
+        "text": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "read": { "type": "boolean" }
+      },
+      "required": ["id", "customerId", "sender", "createdAt"]
+    },
+    "StoreSettings": {
+      "title": "StoreSettings",
+      "description": "Paramètres généraux de l'entreprise HOUSSETECH",
+      "type": "object",
+      "properties": {
+        "companyName": { "type": "string" },
+        "companyPhone": { "type": "string" },
+        "depositThreshold": { "type": "number" }
+      },
+      "required": ["companyName", "companyPhone"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Pièce moto du catalogue",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "price": { "type": "number" },
+        "stock": { "type": "number" }
+      },
+      "required": ["id", "name", "price"]
+    }
+  },
+  "firestore": {
+    "/customers/{customerId}": {
+      "schema": "Customer",
+      "description": "Comptes clients synchronisés en direct sur tous les téléphones"
+    },
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Commandes passées par les clients"
+    },
+    "/chatMessages/{messageId}": {
+      "schema": "ChatMessage",
+      "description": "Messages échangés entre clients et administration"
+    },
+    "/settings/{settingId}": {
+      "schema": "StoreSettings",
+      "description": "Paramètres de la boutique"
+    },
+    "/products/{productId}": {
+      "schema": "Product",
+      "description": "Pièces détachées moto en stock et sur commande"
+    }
+  }
+}
