@@ -2,6 +2,9 @@ import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import fs from 'fs';
+import { initializeApp } from 'firebase/app';
+import { getFirestore, doc, setDoc } from 'firebase/firestore';
+import { formatKinshasaDateTime } from './src/utils/dateUtils';
 import {
   INITIAL_PRODUCTS,
   INITIAL_CUSTOMERS,
@@ -10,6 +13,35 @@ import {
   INITIAL_CHAT_MESSAGES,
 } from './src/data/initialData';
 import { Customer, Order, ChatMessage, StoreSettings, Product } from './src/types';
+
+// Nettoie un objet pour Firestore en supprimant récursivement les valeurs undefined
+function cleanForFirestore(obj: any): any {
+  if (obj === null || obj === undefined) return null;
+  if (Array.isArray(obj)) return obj.map(cleanForFirestore);
+  if (typeof obj === 'object') {
+    const res: Record<string, any> = {};
+    for (const [k, v] of Object.entries(obj)) {
+      if (v !== undefined) {
+        res[k] = cleanForFirestore(v);
+      }
+    }
+    return res;
+  }
+  return obj;
+}
+
+let serverFirestoreDb: any = null;
+try {
+  const configPath = path.resolve(process.cwd(), 'firebase-applet-config.json');
+  if (fs.existsSync(configPath)) {
+    const fbConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    const serverApp = initializeApp(fbConfig, 'server-applet');
+    serverFirestoreDb = fbConfig.firestoreDatabaseId ? getFirestore(serverApp, fbConfig.firestoreDatabaseId) : getFirestore(serverApp);
+    console.log('[Server] Connexion Firestore centralisée établie avec succès.');
+  }
+} catch (e) {
+  console.warn('[Server] Note connexion Firestore:', e);
+}
 
 interface ServerNotification {
   id: string;
@@ -214,7 +246,7 @@ async function startServer() {
       db.customers[existingIndex] = customerToReturn;
     } else {
       // Création d'un nouveau compte client ACTIVÉ DIRECTEMENT (Pas d'attente de validation requise)
-      const newCustId = `cust-${Date.now()}`;
+      const newCustId = req.body.id || `cust-${Date.now()}`;
       customerToReturn = {
         id: newCustId,
         fullName: fullName.trim(),
@@ -223,11 +255,11 @@ async function startServer() {
         address: address?.trim() || '',
         avatar: req.body.avatar || undefined,
         location: req.body.location || undefined,
-        registeredAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
+        registeredAt: req.body.registeredAt || formatKinshasaDateTime(),
         status: 'valide', // Validé directement sans attente
         pendingVerification: false,
         isBlocked: false,
-        validatedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
+        validatedAt: req.body.validatedAt || formatKinshasaDateTime(),
         validationCode: validationCode || `VAL-${Math.floor(1000 + Math.random() * 9000)}`,
         notes: notes || `Compte actif créé directement. Possibilité de blocage ou suppression par l'administration.`,
       };
@@ -281,6 +313,13 @@ Bonjour ${customerToReturn.fullName}, votre compte client a été créé et acti
 
     saveDatabase(db);
     console.log(`[API] Client inscrit: ${customerToReturn.fullName} (${customerToReturn.phone}) - Compte Validé Directement`);
+
+    // Synchronisation temps réel Firestore
+    if (serverFirestoreDb) {
+      setDoc(doc(serverFirestoreDb, 'customers', customerToReturn.id), cleanForFirestore(customerToReturn), { merge: true })
+        .catch((e) => console.warn('[Server] Note sync customer Firestore:', e));
+    }
+
     res.json({ success: true, customer: customerToReturn, notification: newNotif });
   });
 
@@ -302,7 +341,7 @@ Bonjour ${customerToReturn.fullName}, votre compte client a été créé et acti
       ...current,
       status: willBeBlocked ? 'bloque' : (willBeValid ? 'valide' : (status || current.status)),
       isBlocked: willBeBlocked ? true : (willBeValid ? false : Boolean(current.isBlocked)),
-      blockedAt: willBeBlocked ? (current.blockedAt || new Date().toISOString()) : undefined,
+      blockedAt: willBeBlocked ? (current.blockedAt || formatKinshasaDateTime()) : undefined,
       blockedReason: willBeBlocked ? (blockedReason || current.blockedReason || 'Compte suspendu par l\'administrateur') : undefined,
       pendingVerification: false,
       notes: notes !== undefined ? notes : current.notes,
@@ -312,12 +351,18 @@ Bonjour ${customerToReturn.fullName}, votre compte client a été créé et acti
       address: address || current.address,
       avatar: avatar !== undefined ? avatar : current.avatar,
       location: location !== undefined ? location : current.location,
-      validatedAt: willBeValid ? (current.validatedAt || new Date().toISOString().replace('T', ' ').substring(0, 16)) : current.validatedAt,
+      validatedAt: willBeValid ? (current.validatedAt || formatKinshasaDateTime()) : current.validatedAt,
     };
 
     db.customers[customerIndex] = updatedCustomer;
     saveDatabase(db);
     console.log(`[API] Client mis à jour: ${updatedCustomer.fullName} -> Statut: ${updatedCustomer.status} (Bloqué: ${updatedCustomer.isBlocked})`);
+
+    if (serverFirestoreDb) {
+      setDoc(doc(serverFirestoreDb, 'customers', id), cleanForFirestore(updatedCustomer), { merge: true })
+        .catch((e) => console.warn('[Server] Note update customer Firestore:', e));
+    }
+
     res.json({ success: true, customer: updatedCustomer });
   });
 
@@ -344,7 +389,7 @@ Bonjour ${customerToReturn.fullName}, votre compte client a été créé et acti
     const newOrder: Order = {
       ...orderData,
       id: orderData.id || `ord-${Date.now()}`,
-      createdAt: orderData.createdAt || new Date().toISOString().replace('T', ' ').substring(0, 16),
+      createdAt: orderData.createdAt || formatKinshasaDateTime(),
     };
 
     db.orders.unshift(newOrder);
@@ -365,7 +410,7 @@ Bonjour ${customerToReturn.fullName}, votre compte client a été créé et acti
       type: 'order',
       title: 'Nouvelle Commande Reçue !',
       message: `Commande ${newOrder.orderNumber} par ${newOrder.customerName} (${newOrder.customerPhone}) - Total: $${newOrder.total}`,
-      createdAt: new Date().toISOString(),
+      createdAt: formatKinshasaDateTime(),
       read: false,
       orderId: newOrder.id,
       customerId: newOrder.customerId,
@@ -374,6 +419,14 @@ Bonjour ${customerToReturn.fullName}, votre compte client a été créé et acti
 
     saveDatabase(db);
     console.log(`[API] Nouvelle commande: ${newOrder.orderNumber} pour ${newOrder.customerName}`);
+
+    // Synchronisation Firestore
+    if (serverFirestoreDb) {
+      setDoc(doc(serverFirestoreDb, 'orders', newOrder.id), cleanForFirestore(newOrder), { merge: true })
+        .then(() => console.log(`[Server] Commande ${newOrder.id} répliquée dans Firestore.`))
+        .catch((e) => console.warn('[Server] Note sync order Firestore:', e));
+    }
+
     res.json({ success: true, order: newOrder });
   });
 
@@ -394,6 +447,12 @@ Bonjour ${customerToReturn.fullName}, votre compte client a été créé et acti
 
     saveDatabase(db);
     console.log(`[API] Commande ${db.orders[orderIndex].orderNumber} mise à jour: Statut ${db.orders[orderIndex].status}`);
+
+    if (serverFirestoreDb) {
+      setDoc(doc(serverFirestoreDb, 'orders', id), cleanForFirestore(db.orders[orderIndex]), { merge: true })
+        .catch((e) => console.warn('[Server] Note update order Firestore:', e));
+    }
+
     res.json({ success: true, order: db.orders[orderIndex] });
   });
 
@@ -403,26 +462,32 @@ Bonjour ${customerToReturn.fullName}, votre compte client a été créé et acti
   });
 
   app.post('/api/chat', (req, res) => {
-    const { customerId, customerName, customerPhone, sender, text, images, orderId } = req.body;
+    const { id, customerId, customerName, customerPhone, sender, text, images, orderId, createdAt } = req.body;
 
     if (!customerId || (!text && (!images || images.length === 0))) {
       return res.status(400).json({ error: 'Message ou photo requis' });
     }
 
     const newMsg: ChatMessage = {
-      id: `msg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      id: id || `msg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       orderId,
       customerId,
       customerName: customerName || 'Client Moto',
       customerPhone: customerPhone || '',
       sender: sender || 'client',
       text: (text || '').trim(),
-      images: Array.isArray(images) ? images : [],
-      createdAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
+      images: Array.isArray(images) && images.length > 0 ? images : undefined,
+      createdAt: createdAt || formatKinshasaDateTime(),
       read: sender === 'admin',
     };
 
-    db.chatMessages.push(newMsg);
+    // Éviter les doublons si le message a déjà été ajouté
+    const existingIndex = db.chatMessages.findIndex((m) => m.id === newMsg.id);
+    if (existingIndex >= 0) {
+      db.chatMessages[existingIndex] = newMsg;
+    } else {
+      db.chatMessages.push(newMsg);
+    }
 
     // Si le message provient du client, créer une notification admin
     if (sender === 'client') {
@@ -433,7 +498,7 @@ Bonjour ${customerToReturn.fullName}, votre compte client a été créé et acti
         message: newMsg.text
           ? newMsg.text.substring(0, 60) + (newMsg.text.length > 60 ? '...' : '')
           : `A envoyé ${newMsg.images?.length || 1} photo(s)`,
-        createdAt: new Date().toISOString(),
+        createdAt: formatKinshasaDateTime(),
         read: false,
         customerId: newMsg.customerId,
       };
@@ -441,6 +506,15 @@ Bonjour ${customerToReturn.fullName}, votre compte client a été créé et acti
     }
 
     saveDatabase(db);
+    console.log(`[API] Message chat enregistré de ${newMsg.sender} (${newMsg.customerName}) pour ${newMsg.customerId}`);
+
+    // Réplication temps réel Firestore
+    if (serverFirestoreDb) {
+      setDoc(doc(serverFirestoreDb, 'chatMessages', newMsg.id), cleanForFirestore(newMsg), { merge: true })
+        .then(() => console.log(`[Server] Message ${newMsg.id} répliqué dans Firestore.`))
+        .catch((e) => console.warn('[Server] Note sync chat Firestore:', e));
+    }
+
     res.json({ success: true, message: newMsg });
   });
 
@@ -509,7 +583,10 @@ Bonjour ${customerToReturn.fullName}, votre compte client a été créé et acti
   // =========================================================================
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: false,
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);

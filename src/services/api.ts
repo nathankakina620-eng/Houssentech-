@@ -38,12 +38,15 @@ export const api = {
 
   // 2. Inscription d'un nouveau client (depuis n'importe quel téléphone)
   async registerCustomer(customerData: {
+    id?: string;
     fullName: string;
     phone: string;
     city?: string;
     address?: string;
     validationCode?: string;
     notes?: string;
+    registeredAt?: string;
+    validatedAt?: string;
   }): Promise<{ success: boolean; customer?: Customer; error?: string }> {
     try {
       const res = await fetch(`${API_BASE}/customers`, {
@@ -136,6 +139,7 @@ export const api = {
 
   // 7. Envoi de message ou de photo dans la messagerie
   async sendChatMessage(msg: {
+    id?: string;
     customerId: string;
     customerName: string;
     customerPhone: string;
@@ -143,6 +147,7 @@ export const api = {
     text: string;
     images?: string[];
     orderId?: string;
+    createdAt?: string;
   }): Promise<{ success: boolean; message?: ChatMessage }> {
     try {
       const res = await fetch(`${API_BASE}/chat`, {

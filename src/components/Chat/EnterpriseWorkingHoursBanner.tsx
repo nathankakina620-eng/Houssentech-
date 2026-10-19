@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Clock, Calendar, ShieldCheck, Truck, Pin, ChevronDown, ChevronUp, Building2, CheckCircle2 } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
+import { getKinshasaNow, formatKinshasaTime } from '../../utils/dateUtils';
 
 interface Props {
   compact?: boolean;
@@ -10,12 +11,13 @@ export const EnterpriseWorkingHoursBanner: React.FC<Props> = ({ compact = false 
   const { settings, currentUser } = useStore();
   const [isExpanded, setIsExpanded] = useState(!compact);
 
-  // Déterminer en temps réel si l'entreprise est ouverte ou fermée
-  const now = new Date();
+  // Déterminer en temps réel si l'entreprise est ouverte ou fermée selon l'heure officielle de Kinshasa (UTC+1)
+  const now = getKinshasaNow();
   const day = now.getDay(); // 0: Dimanche, 1: Lundi, ..., 6: Samedi
   const hours = now.getHours();
   const minutes = now.getMinutes();
   const currentTimeDec = hours + minutes / 60;
+  const kinshasaTimeDisplay = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 
   let isOpenNow = false;
   let statusText = '🔴 Actuellement Fermé';
@@ -78,6 +80,11 @@ export const EnterpriseWorkingHoursBanner: React.FC<Props> = ({ compact = false 
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700" title="Heure officielle actuelle à Kinshasa (UTC+1)">
+            <Clock className="w-3 h-3 text-amber-400" />
+            <span>Kinshasa {kinshasaTimeDisplay}</span>
+          </span>
+
           <span
             className={`hidden sm:inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
               isOpenNow
@@ -86,7 +93,6 @@ export const EnterpriseWorkingHoursBanner: React.FC<Props> = ({ compact = false 
             }`}
             title={nextOpenText}
           >
-            <Clock className="w-3 h-3" />
             <span>{statusText}</span>
           </span>
 

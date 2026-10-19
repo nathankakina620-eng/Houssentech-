@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   Wrench,
   Plus,
@@ -23,6 +23,7 @@ import {
   Search,
   Filter,
   Check,
+  Download,
   Phone,
   KeyRound,
   ShieldCheck,
@@ -58,6 +59,7 @@ import { OrderReceiptModal } from '../Receipt/OrderReceiptModal';
 import { ChatImageLightbox } from '../Chat/ChatImageLightbox';
 import { ChatImageUploader } from '../Chat/ChatImageUploader';
 import { ChatMessageBubbleImages } from '../Chat/ChatMessageBubbleImages';
+import { formatFriendlyDateTime } from '../../utils/dateUtils';
 
 // High quality motorcycle part presets organized by category
 const MOTORCYCLE_PHOTO_PRESETS = [
@@ -81,7 +83,11 @@ const CATEGORIES: ProductCategory[] = [
   'Suspension & Direction',
 ];
 
-export const AdminDashboard: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+export const AdminDashboard: React.FC<{
+  onClose: () => void;
+  initialTab?: 'stocks' | 'orders' | 'products' | 'chat' | 'customers' | 'settings';
+  initialChatCustomerId?: string;
+}> = ({ onClose, initialTab, initialChatCustomerId }) => {
   const {
     products,
     customers,
@@ -110,8 +116,14 @@ export const AdminDashboard: React.FC<{ onClose: () => void }> = ({ onClose }) =
   } = useStore();
 
   // Tabs: added 'stocks'
-  const [activeTab, setActiveTab] = useState<'stocks' | 'orders' | 'products' | 'chat' | 'customers' | 'settings'>('stocks');
+  const [activeTab, setActiveTab] = useState<'stocks' | 'orders' | 'products' | 'chat' | 'customers' | 'settings'>(initialTab || 'stocks');
   const [selectedReceiptOrder, setSelectedReceiptOrder] = useState<Order | null>(null);
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
 
   // Product modal state
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
@@ -153,8 +165,16 @@ export const AdminDashboard: React.FC<{ onClose: () => void }> = ({ onClose }) =
 
   // Chat in admin state
   const [selectedChatCustomerId, setSelectedChatCustomerId] = useState<string>(
-    customers[0]?.id || 'guest-current'
+    initialChatCustomerId || customers[0]?.id || 'guest-current'
   );
+  const [chatSearchText, setChatSearchText] = useState('');
+
+  useEffect(() => {
+    if (initialChatCustomerId) {
+      setSelectedChatCustomerId(initialChatCustomerId);
+    }
+  }, [initialChatCustomerId]);
+
   const [adminReplyText, setAdminReplyText] = useState('');
   const [adminChatImages, setAdminChatImages] = useState<string[]>([]);
   const adminFileInputRef = useRef<HTMLInputElement>(null);
@@ -398,11 +418,15 @@ export const AdminDashboard: React.FC<{ onClose: () => void }> = ({ onClose }) =
     if (!adminReplyText.trim() && adminChatImages.length === 0) return;
 
     const targetCustomer = customers.find((c) => c.id === selectedChatCustomerId);
+    const activeConv = chatConversations.find((c) => c.id === selectedChatCustomerId);
+    const clientName = targetCustomer?.fullName || activeConv?.clientName || 'Client Moto';
+    const clientPhone = targetCustomer?.phone || activeConv?.clientPhone || '';
+
     sendChatMessage(
       adminReplyText.trim(),
       selectedChatCustomerId,
-      targetCustomer?.fullName || 'Client Moto',
-      targetCustomer?.phone || '',
+      clientName,
+      clientPhone,
       'admin',
       adminChatImages
     );
@@ -460,7 +484,102 @@ export const AdminDashboard: React.FC<{ onClose: () => void }> = ({ onClose }) =
     return true;
   });
 
-  const chatCustomerIds = Array.from(new Set(chatMessages.map((m) => m.customerId)));
+  const unreadChatMessagesCount = chatMessages.filter(
+    (m) => m.sender === 'client' && !m.read
+  ).length;
+
+  const chatConversations = useMemo(() => {
+    // Regrouper par téléphone normalisé ou par ID client/invité
+    const rawIds = Array.from(
+      new Set([
+        ...chatMessages.map((m) => m.customerId),
+        ...customers.map((c) => c.id),
+      ])
+    );
+
+    // Mappage pour fusionner sous une seule conversation par numéro de téléphone
+    const phoneToPrimaryId = new Map<string, string>();
+    customers.forEach((c) => {
+      const clean = (c.phone || '').replace(/[^0-9]/g, '');
+      if (clean) phoneToPrimaryId.set(clean, c.id);
+    });
+
+    const seenGroupKeys = new Set<string>();
+    const unifiedIds: string[] = [];
+
+    rawIds.forEach((cId) => {
+      const cust = customers.find((c) => c.id === cId);
+      const msg = chatMessages.find((m) => m.customerId === cId);
+      const phone = (cust?.phone || msg?.customerPhone || '').replace(/[^0-9]/g, '');
+      const groupKey = phone ? `phone-${phone}` : `id-${cId}`;
+
+      if (!seenGroupKeys.has(groupKey)) {
+        seenGroupKeys.add(groupKey);
+        // Préférer l'ID officiel du compte client si existant
+        if (phone && phoneToPrimaryId.has(phone)) {
+          unifiedIds.push(phoneToPrimaryId.get(phone)!);
+        } else {
+          unifiedIds.push(cId);
+        }
+      }
+    });
+
+    const list = unifiedIds.map((cId) => {
+      const cust = customers.find((c) => c.id === cId);
+      const cleanCustPhone = (cust?.phone || '').replace(/[^0-9]/g, '');
+      const msgs = chatMessages.filter((m) => {
+        if (m.customerId === cId) return true;
+        const cleanMsgPhone = (m.customerPhone || '').replace(/[^0-9]/g, '');
+        if (cleanCustPhone && cleanMsgPhone && cleanCustPhone === cleanMsgPhone) return true;
+        return false;
+      });
+
+      msgs.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+      const lastMsg = msgs[msgs.length - 1];
+      const clientName = cust?.fullName || lastMsg?.customerName || 'Client';
+      const clientPhone = cust?.phone || lastMsg?.customerPhone || '';
+      const unreadCount = msgs.filter((m) => m.sender === 'client' && !m.read).length;
+      const lastTime = lastMsg?.createdAt || cust?.registeredAt || '';
+
+      return {
+        id: cId,
+        customer: cust,
+        messages: msgs,
+        lastMsg,
+        clientName,
+        clientPhone,
+        unreadCount,
+        hasUnread: unreadCount > 0,
+        lastTime,
+      };
+    });
+
+    // Trier : les conversations ayant des messages non lus en premier, puis les plus récentes en haut
+    list.sort((a, b) => {
+      if (a.hasUnread && !b.hasUnread) return -1;
+      if (!a.hasUnread && b.hasUnread) return 1;
+      return (b.lastTime || '').localeCompare(a.lastTime || '');
+    });
+
+    if (chatSearchText.trim()) {
+      const q = chatSearchText.toLowerCase().trim();
+      return list.filter(
+        (item) =>
+          item.clientName.toLowerCase().includes(q) ||
+          item.clientPhone.toLowerCase().includes(q) ||
+          (item.lastMsg?.text && item.lastMsg.text.toLowerCase().includes(q))
+      );
+    }
+
+    return list;
+  }, [chatMessages, customers, chatSearchText]);
+
+  // Si aucun client n'est encore sélectionné, sélectionner le premier avec messages ou le plus récent
+  useEffect(() => {
+    if (!selectedChatCustomerId && chatConversations.length > 0) {
+      setSelectedChatCustomerId(chatConversations[0].id);
+    }
+  }, [selectedChatCustomerId, chatConversations]);
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950 text-slate-100 flex flex-col overflow-hidden animate-fadeIn">
@@ -564,14 +683,21 @@ export const AdminDashboard: React.FC<{ onClose: () => void }> = ({ onClose }) =
 
         <button
           onClick={() => setActiveTab('chat')}
-          className={`py-3 px-3.5 text-xs font-bold flex items-center gap-2 border-b-2 transition whitespace-nowrap ${
+          className={`py-3 px-3.5 text-xs font-bold flex items-center gap-2 border-b-2 transition whitespace-nowrap relative ${
             activeTab === 'chat'
               ? 'border-red-500 text-white'
               : 'border-transparent text-slate-400 hover:text-slate-200'
           }`}
         >
           <MessageSquare className="w-4 h-4" />
-          <span>Discussion Interne Site ({chatCustomerIds.length})</span>
+          <span>Messagerie Clients</span>
+          {unreadChatMessagesCount > 0 ? (
+            <span className="px-2 py-0.5 rounded-full bg-red-600 text-white text-[10px] font-black animate-pulse shadow-sm shadow-red-600/50">
+              {unreadChatMessagesCount} nouveau{unreadChatMessagesCount > 1 ? 'x' : ''}
+            </span>
+          ) : (
+            <span className="text-[11px] text-slate-500 font-normal">({chatConversations.length})</span>
+          )}
         </button>
 
         <button
@@ -1182,61 +1308,141 @@ export const AdminDashboard: React.FC<{ onClose: () => void }> = ({ onClose }) =
         {/* ================= TAB 3: INTERNAL CHAT ================= */}
         {activeTab === 'chat' && (
           <div className="max-w-5xl mx-auto h-[600px] bg-slate-900 rounded-2xl border border-slate-800 flex overflow-hidden">
-            <div className="w-1/3 border-r border-slate-800 flex flex-col bg-slate-950/50">
-              <div className="p-3 border-b border-slate-800 text-xs font-bold text-white flex items-center gap-2">
-                <MessageSquare className="w-4 h-4 text-red-500" />
-                <span>Discussions Clients ({chatCustomerIds.length})</span>
+            <div className="w-1/3 min-w-[260px] max-w-[340px] border-r border-slate-800 flex flex-col bg-slate-950/70">
+              <div className="p-3 border-b border-slate-800 flex flex-col gap-2 bg-slate-950">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <MessageSquare className="w-4 h-4 text-red-500" />
+                    <span>Discussions Clients ({chatConversations.length})</span>
+                  </span>
+                  {unreadChatMessagesCount > 0 && (
+                    <span className="px-2 py-0.5 rounded-full bg-red-600 text-white text-[10px] font-black animate-pulse">
+                      {unreadChatMessagesCount} non lu{unreadChatMessagesCount > 1 ? 's' : ''}
+                    </span>
+                  )}
+                </div>
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Chercher par nom ou numéro..."
+                    value={chatSearchText}
+                    onChange={(e) => setChatSearchText(e.target.value)}
+                    className="w-full pl-8 pr-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-red-500"
+                  />
+                </div>
               </div>
 
               <div className="flex-1 overflow-y-auto divide-y divide-slate-800/60">
-                {chatCustomerIds.map((cId) => {
-                  const msgs = chatMessages.filter((m) => m.customerId === cId);
-                  const lastMsg = msgs[msgs.length - 1];
-                  const clientName = lastMsg?.customerName || 'Client';
-                  const clientPhone = lastMsg?.customerPhone || '';
-                  const unread = msgs.some((m) => m.sender === 'client' && !m.read);
-
-                  return (
-                    <button
-                      key={cId}
-                      onClick={() => {
-                        setSelectedChatCustomerId(cId);
-                        markChatAsRead(cId);
-                      }}
-                      className={`w-full text-left p-3 hover:bg-slate-800/80 transition flex items-center justify-between ${
-                        selectedChatCustomerId === cId ? 'bg-slate-800 border-l-2 border-red-500' : ''
-                      }`}
-                    >
-                      <div className="min-w-0">
-                        <p className="font-bold text-xs text-white truncate">{clientName}</p>
-                        <p className="text-[10px] text-slate-400 truncate">{clientPhone}</p>
-                        <p className="text-[11px] text-slate-400 truncate mt-0.5">{lastMsg?.text}</p>
-                      </div>
-                      {unread && (
-                        <span className="w-2.5 h-2.5 rounded-full bg-red-500 shrink-0 animate-pulse" />
-                      )}
-                    </button>
-                  );
-                })}
+                {chatConversations.length === 0 ? (
+                  <div className="p-6 text-center text-xs text-slate-500">
+                    Aucune discussion trouvée.
+                  </div>
+                ) : (
+                  chatConversations.map((item) => {
+                    const isSelected = selectedChatCustomerId === item.id;
+                    const isBlocked = item.customer?.status === 'bloque' || item.customer?.isBlocked;
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => {
+                          setSelectedChatCustomerId(item.id);
+                          markChatAsRead(item.id);
+                        }}
+                        className={`w-full text-left p-3 hover:bg-slate-800/80 transition flex items-start gap-2.5 ${
+                          isSelected ? 'bg-slate-800 border-l-4 border-red-500' : ''
+                        }`}
+                      >
+                        <div className={`w-8 h-8 rounded-xl shrink-0 flex items-center justify-center font-black text-xs border ${
+                          isBlocked
+                            ? 'bg-rose-950 border-rose-600 text-rose-300'
+                            : item.hasUnread
+                            ? 'bg-emerald-950 border-emerald-500 text-emerald-300'
+                            : 'bg-slate-800 border-slate-700 text-slate-300'
+                        }`}>
+                          {item.clientName.substring(0, 2).toUpperCase()}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-1">
+                            <p className="font-bold text-xs text-white truncate">{item.clientName}</p>
+                            {item.lastTime && (
+                              <span className="text-[10px] text-slate-500 shrink-0 font-mono">
+                                {formatFriendlyDateTime(item.lastTime).replace("Aujourd'hui à ", '')}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-slate-400 font-mono truncate">{item.clientPhone}</p>
+                          <p className="text-[11px] text-slate-400 truncate mt-0.5">
+                            {item.lastMsg?.text || (item.lastMsg?.images ? '📷 Photo reçue' : 'Nouveau client inscrit')}
+                          </p>
+                        </div>
+                        {item.hasUnread && (
+                          <span className="px-1.5 py-0.5 rounded-full bg-red-600 text-white text-[10px] font-black shrink-0 animate-pulse">
+                            {item.unreadCount}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })
+                )}
               </div>
             </div>
 
             <div className="flex-1 flex flex-col bg-slate-900">
-              <div className="p-3 border-b border-slate-800 flex items-center justify-between">
-                <div>
-                  <h3 className="text-xs font-bold text-white">Discussion active</h3>
-                  <p className="text-[10px] text-slate-400">ID : {selectedChatCustomerId}</p>
-                </div>
-              </div>
+              {(() => {
+                const activeConv = chatConversations.find((c) => c.id === selectedChatCustomerId);
+                const activeCust = activeConv?.customer || customers.find((c) => c.id === selectedChatCustomerId);
+                const displayName = activeCust?.fullName || activeConv?.clientName || 'Client';
+                const displayPhone = activeCust?.phone || activeConv?.clientPhone || '';
+                const displayCity = activeCust?.city || '';
+                return (
+                  <div className="p-3 border-b border-slate-800 flex items-center justify-between gap-2 bg-slate-900/90">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-8 h-8 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center font-black text-xs text-slate-200 shrink-0">
+                        {displayName.substring(0, 2).toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-xs font-bold text-white truncate">{displayName}</h3>
+                          {activeCust?.status === 'valide' && (
+                            <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.2 rounded border border-emerald-500/30">
+                              Actif
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-slate-400 truncate">
+                          {displayPhone} {displayCity ? `• ${displayCity}` : ''}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Message officiel des horaires (Lun-Ven 8h-16h30, Sam 8h-14h) et modes de travail épinglé */}
               <EnterpriseWorkingHoursBanner compact={true} />
 
               <div className="flex-1 p-4 overflow-y-auto space-y-4 bg-slate-950/70 text-xs">
                 {chatMessages
-                  .filter((m) => m.customerId === selectedChatCustomerId)
+                  .filter((m) => {
+                    if (m.customerId === selectedChatCustomerId) return true;
+                    const cust = customers.find((c) => c.id === selectedChatCustomerId);
+                    const cleanCustPhone = (cust?.phone || '').replace(/[^0-9]/g, '');
+                    const activeConv = chatConversations.find((c) => c.id === selectedChatCustomerId);
+                    const cleanConvPhone = (activeConv?.clientPhone || '').replace(/[^0-9]/g, '');
+                    const targetPhone = cleanCustPhone || cleanConvPhone;
+                    const cleanMsgPhone = (m.customerPhone || '').replace(/[^0-9]/g, '');
+                    if (targetPhone && cleanMsgPhone && targetPhone === cleanMsgPhone) return true;
+                    return false;
+                  })
                   .map((msg) => {
                     const isFromAdmin = msg.sender === 'admin';
+                    const matchingOrder = orders.find(
+                      (o) =>
+                        o.id === msg.orderId ||
+                        (msg.text && o.orderNumber && msg.text.includes(o.orderNumber))
+                    );
+
                     return (
                       <div
                         key={msg.id}
@@ -1279,6 +1485,34 @@ export const AdminDashboard: React.FC<{ onClose: () => void }> = ({ onClose }) =
                               {msg.text}
                             </p>
                           )}
+
+                          {/* CARTE D'ACHAT & FACTURE TÉLÉCHARGEABLE POUR L'ADMINISTRATEUR */}
+                          {matchingOrder && (
+                            <div className="mt-3 p-3 rounded-xl bg-slate-950/90 border-2 border-red-500/60 text-left space-y-2 shadow-inner">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-[11px] font-black text-red-400 flex items-center gap-1.5">
+                                  <FileText className="w-4 h-4 text-red-500" />
+                                  <span>Facture Officielle {matchingOrder.orderNumber}</span>
+                                </span>
+                                <span className="font-mono text-xs font-black text-emerald-400">
+                                  ${matchingOrder.total.toFixed(2)} USD
+                                </span>
+                              </div>
+                              <p className="text-[10px] text-slate-300 leading-tight">
+                                {matchingOrder.items.length} article(s) commandé(s) • Expédition : {matchingOrder.shippingSchedule}
+                                {matchingOrder.isDepositRequired ? ` • Acompte 70% : $${matchingOrder.depositAmount.toFixed(2)}` : ' • Réglé'}
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedReceiptOrder(matchingOrder)}
+                                className="w-full py-2 px-3 bg-red-600 hover:bg-red-500 text-white rounded-lg text-xs font-black transition flex items-center justify-center gap-2 shadow-md cursor-pointer active:scale-95"
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                                <span>Télécharger la Facture / Reçu PDF</span>
+                              </button>
+                            </div>
+                          )}
+
                           <ChatMessageBubbleImages
                             images={msg.images}
                             onImageClick={(url) => setAdminLightboxImage(url)}
@@ -1287,7 +1521,7 @@ export const AdminDashboard: React.FC<{ onClose: () => void }> = ({ onClose }) =
                         <span className="text-[10px] text-slate-500 mt-1 px-1 font-mono flex items-center gap-1">
                           <span>{isFromAdmin ? '👑 Vous' : `👤 ${msg.customerName}`}</span>
                           <span>•</span>
-                          <span>{msg.createdAt.substring(11, 16) || msg.createdAt}</span>
+                          <span>{formatFriendlyDateTime(msg.createdAt)}</span>
                         </span>
                       </div>
                     );

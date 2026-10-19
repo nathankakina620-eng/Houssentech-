@@ -21,6 +21,7 @@ import {
 import { computeShippingSchedule } from '../utils/shippingSchedule';
 import { api } from '../services/api';
 import { firestoreService } from '../services/firestoreService';
+import { formatKinshasaDateTime } from '../utils/dateUtils';
 
 export interface ServerNotification {
   id: string;
@@ -63,6 +64,8 @@ interface StoreContextType {
   markNotificationAsRead: (id?: string) => Promise<void>;
   newCustomerToast: { customer: Customer; message: string } | null;
   dismissNewCustomerToast: () => void;
+  newChatToast: { message: ChatMessage; text: string } | null;
+  dismissNewChatToast: () => void;
 
   // Setters & Filters
   setSelectedCategory: (cat: string) => void;
@@ -327,7 +330,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // Real-time server notifications & audio alert
   const [notifications, setNotifications] = useState<ServerNotification[]>([]);
   const [newCustomerToast, setNewCustomerToast] = useState<{ customer: Customer; message: string } | null>(null);
+  const [newChatToast, setNewChatToast] = useState<{ message: ChatMessage; text: string } | null>(null);
   const previousPendingIdsRef = useRef<Set<string>>(new Set());
+  const previousChatIdsRef = useRef<Set<string>>(new Set());
   const isFirstSyncRef = useRef<boolean>(true);
 
   const playNotificationChime = () => {
@@ -351,25 +356,22 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   };
 
-  // Synchronisation continue et automatique avec la base de données centrale du serveur
   // Synchronisation continue et automatique avec Firestore et le serveur central
   // Permet à tous les téléphones (clients et administrateur) d'être synchronisés en temps réel
   const syncWithServer = async () => {
     try {
-      // 1. Requête directe synchronisée vers Cloud Firestore (temps réel absolu multi-appareils)
-      let firestoreCustomers: Customer[] = [];
-      try {
-        firestoreCustomers = await firestoreService.getCustomers();
-      } catch (fErr) {
-        console.warn('[Firestore] Erreur requête synchronisée directe:', fErr);
-      }
+      // 1. Requête directe synchronisée vers Cloud Firestore pour les clients, messages et commandes
+      const [firestoreCustomers, firestoreChat, firestoreOrders] = await Promise.all([
+        firestoreService.getCustomers().catch(() => [] as Customer[]),
+        firestoreService.getChatMessages().catch(() => [] as ChatMessage[]),
+        firestoreService.getOrders().catch(() => [] as Order[]),
+      ]);
 
       // 2. Requête vers le serveur d'appoint
       const data = await api.sync().catch(() => null);
 
+      // --- Fusion Clients ---
       const customerMap = new Map<string, Customer>();
-
-      // Insérer les clients du serveur local
       if (data && Array.isArray(data.customers)) {
         data.customers.forEach((c) => {
           customerMap.set(c.id, {
@@ -380,12 +382,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           });
         });
       }
-
-      // Fusionner avec les clients Cloud Firestore (prioritaires et universels)
       if (Array.isArray(firestoreCustomers) && firestoreCustomers.length > 0) {
-        firestoreCustomers.forEach((fc) => {
-          customerMap.set(fc.id, fc);
-        });
+        firestoreCustomers.forEach((fc) => customerMap.set(fc.id, fc));
       }
 
       const mergedCustomers = Array.from(customerMap.values());
@@ -393,7 +391,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         mergedCustomers.sort((a, b) => (b.registeredAt || '').localeCompare(a.registeredAt || ''));
         setCustomers(mergedCustomers);
 
-        // Détection instantanée des nouveaux comptes clients créés (visible UNIQUEMENT si l'administrateur est connecté)
         if (!isFirstSyncRef.current && isAdmin) {
           const newlyAdded = mergedCustomers.find((c) => !previousPendingIdsRef.current.has(c.id));
           if (newlyAdded) {
@@ -404,10 +401,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             });
           }
         }
-        isFirstSyncRef.current = false;
         previousPendingIdsRef.current = new Set(mergedCustomers.map((c) => c.id));
 
-        // Si l'utilisateur actuel est connecté, mettre à jour son profil en direct
         if (currentUser) {
           const fresh = mergedCustomers.find(
             (c) =>
@@ -420,23 +415,41 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
       }
 
-      if (data) {
-        if (Array.isArray(data.orders)) {
-          setOrders(data.orders);
-        }
-        if (Array.isArray(data.chatMessages)) {
-          setChatMessages(data.chatMessages);
-        }
-        if (data.settings) {
-          setSettings(data.settings);
-        }
-        if (Array.isArray(data.products) && data.products.length > 0) {
-          setProducts(data.products);
-        }
-        if (Array.isArray(data.notifications)) {
-          setNotifications(data.notifications);
-        }
+      // --- Fusion Messages Chat (Aucun écrasement, Firestore prioritaire) ---
+      const chatMap = new Map<string, ChatMessage>();
+      if (data && Array.isArray(data.chatMessages)) {
+        data.chatMessages.forEach((m) => chatMap.set(m.id, m));
       }
+      if (Array.isArray(firestoreChat) && firestoreChat.length > 0) {
+        firestoreChat.forEach((m) => chatMap.set(m.id, m));
+      }
+      const mergedChat = Array.from(chatMap.values());
+      if (mergedChat.length > 0) {
+        mergedChat.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+        setChatMessages(mergedChat);
+        previousChatIdsRef.current = new Set(mergedChat.map((m) => m.id));
+      }
+
+      // --- Fusion Commandes (Aucun écrasement, Firestore prioritaire) ---
+      const orderMap = new Map<string, Order>();
+      if (data && Array.isArray(data.orders)) {
+        data.orders.forEach((o) => orderMap.set(o.id, o));
+      }
+      if (Array.isArray(firestoreOrders) && firestoreOrders.length > 0) {
+        firestoreOrders.forEach((o) => orderMap.set(o.id, o));
+      }
+      const mergedOrders = Array.from(orderMap.values());
+      if (mergedOrders.length > 0) {
+        mergedOrders.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+        setOrders(mergedOrders);
+      }
+
+      if (data) {
+        if (data.settings) setSettings(data.settings);
+        if (Array.isArray(data.products) && data.products.length > 0) setProducts(data.products);
+        if (Array.isArray(data.notifications)) setNotifications(data.notifications);
+      }
+      isFirstSyncRef.current = false;
     } catch (err) {
       console.warn('[Sync with Server] Erreur:', err);
     }
@@ -469,7 +482,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             });
           }
         }
-        isFirstSyncRef.current = false;
         previousPendingIdsRef.current = new Set(freshCustomers.map((c) => c.id));
 
         if (currentUser) {
@@ -487,13 +499,43 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     const unsubOrders = firestoreService.subscribeOrders((freshOrders) => {
       if (freshOrders && freshOrders.length > 0) {
-        setOrders(freshOrders);
+        setOrders((prev) => {
+          const map = new Map<string, Order>();
+          prev.forEach((o) => map.set(o.id, o));
+          freshOrders.forEach((o) => map.set(o.id, o));
+          const list = Array.from(map.values());
+          list.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+          return list;
+        });
       }
     });
 
+    // 3. Écoute instantanée des messages clients : apparaît sur le téléphone de l'administrateur dès l'envoi
     const unsubChat = firestoreService.subscribeChatMessages((freshMessages) => {
       if (freshMessages && freshMessages.length > 0) {
-        setChatMessages(freshMessages);
+        setChatMessages((prev) => {
+          const map = new Map<string, ChatMessage>();
+          prev.forEach((m) => map.set(m.id, m));
+          freshMessages.forEach((m) => map.set(m.id, m));
+          const list = Array.from(map.values());
+          list.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+          return list;
+        });
+
+        // Notification et sonnette instantanés pour l'administrateur lors de la réception d'un message client
+        if (!isFirstSyncRef.current && isAdmin) {
+          const newClientMsg = freshMessages.find(
+            (m) => m.sender === 'client' && !previousChatIdsRef.current.has(m.id)
+          );
+          if (newClientMsg) {
+            playNotificationChime();
+            setNewChatToast({
+              message: newClientMsg,
+              text: `Message de ${newClientMsg.customerName} : "${newClientMsg.text.substring(0, 45)}"`,
+            });
+          }
+        }
+        previousChatIdsRef.current = new Set(freshMessages.map((m) => m.id));
       }
     });
 
@@ -683,11 +725,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       phone,
       city,
       address: address || '',
-      registeredAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
+      registeredAt: formatKinshasaDateTime(),
       status: 'valide', // Compte DIRECTEMENT VALIDÉ !
       pendingVerification: false, // Plus aucune attente requise
       isBlocked: false,
-      validatedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
+      validatedAt: formatKinshasaDateTime(),
       validationCode,
       notes: `Compte client activé immédiatement à l'inscription`,
     };
@@ -719,7 +761,7 @@ Bonjour ${newCustomer.fullName}, votre compte client a été créé et activé a
 4. Traçabilité & Reçu : Suivi en direct du colis étape par étape et reçu officiel PDF téléchargeable avec QR Code.
 
 📌 Ce message officiel reste fixé en premier position au sommet de nos échanges pour vous référer à nos horaires et nos conditions.`,
-      createdAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
+      createdAt: formatKinshasaDateTime(),
       read: true,
     };
 
@@ -744,12 +786,15 @@ Bonjour ${newCustomer.fullName}, votre compte client a été créé et activé a
 
     // 2. Envoi en parallèle au serveur central
     api.registerCustomer({
+      id: newCustomer.id,
       fullName,
       phone,
       city,
       address,
       validationCode,
       notes: newCustomer.notes,
+      registeredAt: newCustomer.registeredAt,
+      validatedAt: newCustomer.validatedAt,
     }).then((res) => {
       if (res.success && res.customer) {
         setCustomers((prev) => [
@@ -1049,7 +1094,7 @@ Bonjour ${newCustomer.fullName}, votre compte client a été créé et activé a
       shippingSchedule: schedule.targetSaturdayDate,
       shippingBatch: schedule.batch,
       orderCutoffNotice: schedule.detailedNotice,
-      createdAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
+      createdAt: formatKinshasaDateTime(),
       notes: data.notes,
     };
 
@@ -1058,6 +1103,51 @@ Bonjour ${newCustomer.fullName}, votre compte client a été créé et activé a
     // Envoi de la commande à Firestore (temps réel) et à l'API locale
     firestoreService.saveOrder(newOrder).catch((err) => console.warn('[Firestore] Note saveOrder:', err));
     api.createOrder(newOrder).catch((err) => console.warn('Erreur envoi commande serveur:', err));
+
+    // Message officiel de confirmation d'achat inséré instantanément dans le fil de conversation
+    const targetCustId =
+      newOrder.customerId ||
+      (currentUser ? currentUser.id : `cust-${newOrder.customerPhone.replace(/[^0-9]/g, '')}`);
+
+    const itemsSummary = newOrder.items
+      .map((it) => `• ${it.quantity}x ${it.name} (${it.brand}) — $${(it.price * it.quantity).toFixed(2)}`)
+      .join('\n');
+
+    const orderConfirmationMsg: ChatMessage = {
+      id: `msg-order-${newOrder.id}`,
+      orderId: newOrder.id,
+      customerId: targetCustId,
+      customerName: newOrder.customerName,
+      customerPhone: newOrder.customerPhone,
+      sender: 'client',
+      text: `🛒 COMMANDE CONFIRMÉE — N° ${newOrder.orderNumber}
+👤 Client : ${newOrder.customerName} (${newOrder.customerPhone})
+📍 Destination : ${newOrder.city}, ${newOrder.deliveryAddress}
+📦 Pièces & Accessoires achetés :
+${itemsSummary}
+
+💰 Total : $${newOrder.total.toFixed(2)} USD
+${newOrder.isDepositRequired ? `🔴 Acompte 70% : $${newOrder.depositAmount.toFixed(2)} USD (Solde: $${newOrder.remainingBalance.toFixed(2)} USD)` : '🟢 Paiement au comptant'}
+🚢 Expédition convoi : Samedi (${schedule.targetSaturdayDate}) matin vers Kinshasa
+
+📄 FACTURE & BON DE COMMANDE : Cliquez ci-dessous pour télécharger ou imprimer directement votre facture officielle PDF !`,
+      createdAt: formatKinshasaDateTime(),
+      read: false,
+    };
+
+    setChatMessages((prev) => [...prev, orderConfirmationMsg]);
+    firestoreService.sendChatMessage(orderConfirmationMsg).catch((err) => console.warn('[Firestore] Note order chat:', err));
+    api.sendChatMessage({
+      id: orderConfirmationMsg.id,
+      orderId: newOrder.id,
+      customerId: targetCustId,
+      customerName: newOrder.customerName,
+      customerPhone: newOrder.customerPhone,
+      sender: 'client',
+      text: orderConfirmationMsg.text,
+      createdAt: orderConfirmationMsg.createdAt,
+    }).catch((err) => console.warn('Erreur sync API order chat:', err));
+
 
     cart.forEach((item) => {
       updateStock(item.product.id, Math.max(0, item.product.stock - item.quantity));
@@ -1181,7 +1271,7 @@ Bonjour ${newCustomer.fullName}, votre compte client a été créé et activé a
           paidOrd = {
             ...o,
             isDepositPaid: true,
-            depositPaidAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
+            depositPaidAt: formatKinshasaDateTime(),
             status: o.status === 'en_attente_acompte' ? 'acompte_recu' : o.status,
           };
           return paidOrd;
@@ -1194,7 +1284,7 @@ Bonjour ${newCustomer.fullName}, votre compte client a été créé et activé a
     }
     api.updateOrder(orderId, {
       isDepositPaid: true,
-      depositPaidAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
+      depositPaidAt: formatKinshasaDateTime(),
       status: 'acompte_recu',
     }).catch(console.warn);
   };
@@ -1225,14 +1315,14 @@ Bonjour ${newCustomer.fullName}, votre compte client a été créé et activé a
     const custPhone = customCustPhone || currentUser?.phone || 'Non renseigné';
 
     const newMsg: ChatMessage = {
-      id: `msg-${Date.now()}`,
+      id: `msg-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       customerId: custId,
       customerName: custName,
       customerPhone: custPhone,
       sender,
       text: trimmedText,
       images: hasImages ? images : undefined,
-      createdAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
+      createdAt: formatKinshasaDateTime(),
       read: false,
     };
 
@@ -1243,12 +1333,14 @@ Bonjour ${newCustomer.fullName}, votre compte client a été créé et activé a
 
     // Envoi au serveur central en parallèle
     api.sendChatMessage({
+      id: newMsg.id,
       customerId: custId,
       customerName: custName,
       customerPhone: custPhone,
       sender,
       text: trimmedText,
       images: hasImages ? images : undefined,
+      createdAt: newMsg.createdAt,
     }).catch((err) => console.warn('Erreur envoi message serveur:', err));
   };
 
@@ -1348,6 +1440,8 @@ Bonjour ${newCustomer.fullName}, votre compte client a été créé et activé a
         markNotificationAsRead,
         newCustomerToast,
         dismissNewCustomerToast,
+        newChatToast,
+        dismissNewChatToast: () => setNewChatToast(null),
         setSelectedCategory,
         setSearchQuery,
         toggleTheme,

@@ -25,6 +25,27 @@ const PRODUCTS_COL = 'products';
 
 let isSeeding = false;
 
+/**
+ * Nettoie récursivement un objet pour Firestore en supprimant toutes les clés 'undefined',
+ * car Firestore lève une erreur fatale dès qu'une valeur undefined est présente.
+ */
+export function cleanForFirestore<T>(data: T): T {
+  if (data === null || data === undefined) return null as any;
+  if (Array.isArray(data)) {
+    return data.map((item) => cleanForFirestore(item)) as any;
+  }
+  if (typeof data === 'object') {
+    const res: Record<string, any> = {};
+    for (const [key, val] of Object.entries(data as Record<string, any>)) {
+      if (val !== undefined) {
+        res[key] = cleanForFirestore(val);
+      }
+    }
+    return res as any;
+  }
+  return data;
+}
+
 export const firestoreService = {
   // Initialisation et amorçage sécurisé des collections au premier démarrage
   async seedInitialDataIfNeeded() {
@@ -37,25 +58,25 @@ export const firestoreService = {
         
         // 1. Clients initiaux
         for (const cust of INITIAL_CUSTOMERS) {
-          await setDoc(doc(db, CUSTOMERS_COL, cust.id), cust);
+          await setDoc(doc(db, CUSTOMERS_COL, cust.id), cleanForFirestore(cust));
         }
 
         // 2. Paramètres initiaux
-        await setDoc(doc(db, SETTINGS_COL, 'general'), INITIAL_SETTINGS);
+        await setDoc(doc(db, SETTINGS_COL, 'general'), cleanForFirestore(INITIAL_SETTINGS));
 
         // 3. Commandes initiales
         for (const ord of INITIAL_ORDERS) {
-          await setDoc(doc(db, ORDERS_COL, ord.id), ord);
+          await setDoc(doc(db, ORDERS_COL, ord.id), cleanForFirestore(ord));
         }
 
         // 4. Messages initiaux
         for (const msg of INITIAL_CHAT_MESSAGES) {
-          await setDoc(doc(db, CHAT_COL, msg.id), msg);
+          await setDoc(doc(db, CHAT_COL, msg.id), cleanForFirestore(msg));
         }
 
         // 5. Produits initiaux
         for (const prod of INITIAL_PRODUCTS) {
-          await setDoc(doc(db, PRODUCTS_COL, prod.id), prod);
+          await setDoc(doc(db, PRODUCTS_COL, prod.id), cleanForFirestore(prod));
         }
 
         console.log('[Firestore] Amorçage initial terminé avec succès.');
@@ -131,7 +152,7 @@ export const firestoreService = {
         isBlocked: customer.status === 'bloque' || Boolean(customer.isBlocked),
         pendingVerification: false,
       };
-      await setDoc(doc(db, CUSTOMERS_COL, cleanCustomer.id), cleanCustomer, { merge: true });
+      await setDoc(doc(db, CUSTOMERS_COL, cleanCustomer.id), cleanForFirestore(cleanCustomer), { merge: true });
       console.log(`[Firestore] Client ${cleanCustomer.fullName} (${cleanCustomer.phone}) sauvegardé dans Firestore.`);
     } catch (err) {
       console.error('[Firestore] Erreur sauvegarde client:', err);
@@ -142,7 +163,7 @@ export const firestoreService = {
   // Mettre à jour un client (avatar, localisation map, statut, blocage)
   async updateCustomer(customerId: string, updates: Partial<Customer>): Promise<void> {
     try {
-      await setDoc(doc(db, CUSTOMERS_COL, customerId), updates, { merge: true });
+      await setDoc(doc(db, CUSTOMERS_COL, customerId), cleanForFirestore(updates), { merge: true });
       console.log(`[Firestore] Client ${customerId} mis à jour dans Firestore.`);
     } catch (err) {
       console.error('[Firestore] Erreur update client:', err);
@@ -167,14 +188,12 @@ export const firestoreService = {
       return onSnapshot(
         collection(db, ORDERS_COL),
         (snapshot) => {
-          if (!snapshot.empty) {
-            const list: Order[] = [];
-            snapshot.forEach((d) => {
-              list.push(d.data() as Order);
-            });
-            list.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
-            callback(list);
-          }
+          const list: Order[] = [];
+          snapshot.forEach((d) => {
+            list.push(d.data() as Order);
+          });
+          list.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+          callback(list);
         },
         (error) => {
           console.warn('[Firestore] Erreur écoute commandes:', error);
@@ -186,28 +205,42 @@ export const firestoreService = {
     }
   },
 
+  async getOrders(): Promise<Order[]> {
+    try {
+      const snapshot = await getDocs(collection(db, ORDERS_COL));
+      const list: Order[] = [];
+      snapshot.forEach((d) => {
+        list.push(d.data() as Order);
+      });
+      list.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+      return list;
+    } catch (err) {
+      console.warn('[Firestore] Erreur récupération commandes getDocs:', err);
+      return [];
+    }
+  },
+
   async saveOrder(order: Order): Promise<void> {
     try {
-      await setDoc(doc(db, ORDERS_COL, order.id), order, { merge: true });
+      await setDoc(doc(db, ORDERS_COL, order.id), cleanForFirestore(order), { merge: true });
+      console.log(`[Firestore] Commande ${order.orderNumber || order.id} sauvegardée dans Firestore.`);
     } catch (err) {
       console.error('[Firestore] Erreur sauvegarde commande:', err);
     }
   },
 
-  // 3. Écoute en temps réel de la Messagerie instantanée
+  // 3. Écoute en temps réel de la Messagerie instantanée (Clients & Direction)
   subscribeChatMessages(callback: (messages: ChatMessage[]) => void) {
     try {
       return onSnapshot(
         collection(db, CHAT_COL),
         (snapshot) => {
-          if (!snapshot.empty) {
-            const list: ChatMessage[] = [];
-            snapshot.forEach((d) => {
-              list.push(d.data() as ChatMessage);
-            });
-            list.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
-            callback(list);
-          }
+          const list: ChatMessage[] = [];
+          snapshot.forEach((d) => {
+            list.push(d.data() as ChatMessage);
+          });
+          list.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+          callback(list);
         },
         (error) => {
           console.warn('[Firestore] Erreur écoute chat:', error);
@@ -219,11 +252,44 @@ export const firestoreService = {
     }
   },
 
+  async getChatMessages(): Promise<ChatMessage[]> {
+    try {
+      const snapshot = await getDocs(collection(db, CHAT_COL));
+      const list: ChatMessage[] = [];
+      snapshot.forEach((d) => {
+        list.push(d.data() as ChatMessage);
+      });
+      list.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+      return list;
+    } catch (err) {
+      console.warn('[Firestore] Erreur récupération chat getDocs:', err);
+      return [];
+    }
+  },
+
   async sendChatMessage(message: ChatMessage): Promise<void> {
     try {
-      await setDoc(doc(db, CHAT_COL, message.id), message, { merge: true });
+      await setDoc(doc(db, CHAT_COL, message.id), cleanForFirestore(message), { merge: true });
+      console.log(`[Firestore] Message ${message.id} envoyé par ${message.sender} pour client ${message.customerId}`);
     } catch (err) {
       console.error('[Firestore] Erreur envoi message:', err);
+      throw err;
+    }
+  },
+
+  async markChatAsRead(customerId: string): Promise<void> {
+    try {
+      const snapshot = await getDocs(collection(db, CHAT_COL));
+      const promises: Promise<any>[] = [];
+      snapshot.forEach((d) => {
+        const data = d.data() as ChatMessage;
+        if (data.customerId === customerId && !data.read) {
+          promises.push(setDoc(doc(db, CHAT_COL, d.id), { read: true }, { merge: true }));
+        }
+      });
+      await Promise.all(promises);
+    } catch (err) {
+      console.warn('[Firestore] Note markChatAsRead:', err);
     }
   },
 
@@ -249,7 +315,7 @@ export const firestoreService = {
 
   async updateSettings(settings: StoreSettings): Promise<void> {
     try {
-      await setDoc(doc(db, SETTINGS_COL, 'general'), settings, { merge: true });
+      await setDoc(doc(db, SETTINGS_COL, 'general'), cleanForFirestore(settings), { merge: true });
     } catch (err) {
       console.error('[Firestore] Erreur update settings:', err);
     }
@@ -281,9 +347,10 @@ export const firestoreService = {
 
   async saveProduct(product: Product): Promise<void> {
     try {
-      await setDoc(doc(db, PRODUCTS_COL, product.id), product, { merge: true });
+      await setDoc(doc(db, PRODUCTS_COL, product.id), cleanForFirestore(product), { merge: true });
     } catch (err) {
       console.error('[Firestore] Erreur sauvegarde produit:', err);
     }
   },
 };
+

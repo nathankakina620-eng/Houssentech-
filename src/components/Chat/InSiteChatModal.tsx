@@ -12,21 +12,27 @@ import {
   Crown,
   User,
   Sparkles,
+  FileText,
+  Download,
 } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
 import { EnterpriseWorkingHoursBanner } from './EnterpriseWorkingHoursBanner';
 import { ChatImageLightbox } from './ChatImageLightbox';
 import { ChatImageUploader } from './ChatImageUploader';
 import { ChatMessageBubbleImages } from './ChatMessageBubbleImages';
+import { formatFriendlyDateTime } from '../../utils/dateUtils';
+import { Order } from '../../types';
 
-export const InSiteChatModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
-  isOpen,
-  onClose,
-}) => {
+export const InSiteChatModal: React.FC<{
+  isOpen: boolean;
+  onClose: () => void;
+  onOpenReceipt?: (order: Order) => void;
+}> = ({ isOpen, onClose, onOpenReceipt }) => {
   const {
     chatMessages,
     sendChatMessage,
     currentUser,
+    orders,
     settings,
     getWhatsAppUrl,
     markChatAsRead,
@@ -36,20 +42,74 @@ export const InSiteChatModal: React.FC<{ isOpen: boolean; onClose: () => void }>
   const [images, setImages] = useState<string[]>([]);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [guestName, setGuestName] = useState(currentUser?.fullName || '');
-  const [guestPhone, setGuestPhone] = useState(currentUser?.phone || '');
+
+  // Identifiant persistant de l'appareil client pour que le client retrouve sa conversation même sans compte
+  const [deviceSessionId] = useState<string>(() => {
+    try {
+      let saved = localStorage.getItem('houssetech_client_session_id');
+      if (!saved) {
+        saved = `client-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+        localStorage.setItem('houssetech_client_session_id', saved);
+      }
+      return saved;
+    } catch {
+      return `client-${Date.now()}`;
+    }
+  });
+
+  const [guestName, setGuestName] = useState(() => {
+    if (currentUser?.fullName) return currentUser.fullName;
+    try {
+      return localStorage.getItem('houssetech_client_name') || '';
+    } catch {
+      return '';
+    }
+  });
+
+  const [guestPhone, setGuestPhone] = useState(() => {
+    if (currentUser?.phone) return currentUser.phone;
+    try {
+      return localStorage.getItem('houssetech_client_phone') || '';
+    } catch {
+      return '';
+    }
+  });
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (guestName.trim()) {
+      try {
+        localStorage.setItem('houssetech_client_name', guestName.trim());
+      } catch {}
+    }
+  }, [guestName]);
+
+  useEffect(() => {
+    if (guestPhone.trim()) {
+      try {
+        localStorage.setItem('houssetech_client_phone', guestPhone.trim());
+      } catch {}
+    }
+  }, [guestPhone]);
 
   const activeCustId =
     currentUser?.id ||
-    (guestPhone ? `guest-${guestPhone.replace(/[^0-9]/g, '')}` : 'guest-current');
+    (guestPhone.trim() ? `guest-${guestPhone.replace(/[^0-9]/g, '')}` : deviceSessionId);
 
-  // Filter messages for current user/guest
-  const conversation = chatMessages.filter(
-    (m) =>
-      m.customerId === activeCustId ||
-      (currentUser && m.customerId === currentUser.id)
-  );
+  // Filtrer les messages pour le client connecté ou invité (par identifiant appareil, identifiant client et téléphone)
+  const conversation = chatMessages.filter((m) => {
+    if (m.customerId === activeCustId) return true;
+    if (m.customerId === deviceSessionId) return true;
+    if (currentUser && m.customerId === currentUser.id) return true;
+    const cleanMsgPhone = (m.customerPhone || '').replace(/[^0-9]/g, '');
+    const cleanUserPhone = (currentUser?.phone || '').replace(/[^0-9]/g, '');
+    const cleanGuestPhone = (guestPhone || '').replace(/[^0-9]/g, '');
+    if (cleanUserPhone && cleanMsgPhone && cleanUserPhone === cleanMsgPhone) return true;
+    if (cleanGuestPhone && cleanMsgPhone && cleanGuestPhone === cleanMsgPhone) return true;
+    if (m.customerId === 'guest-current' && !currentUser) return true;
+    return false;
+  });
 
   const isBlocked = currentUser?.status === 'bloque' || currentUser?.isBlocked;
 
@@ -70,11 +130,14 @@ export const InSiteChatModal: React.FC<{ isOpen: boolean; onClose: () => void }>
     if (isBlocked) return;
     if (!inputText.trim() && images.length === 0) return;
 
+    const effectiveName = currentUser?.fullName || guestName.trim() || 'Client Moto';
+    const effectivePhone = currentUser?.phone || guestPhone.trim() || 'Non renseigné';
+
     sendChatMessage(
       inputText.trim(),
       activeCustId,
-      currentUser?.fullName || guestName || 'Client Moto',
-      currentUser?.phone || guestPhone || 'Non renseigné',
+      effectiveName,
+      effectivePhone,
       'client',
       images
     );
@@ -216,6 +279,48 @@ export const InSiteChatModal: React.FC<{ isOpen: boolean; onClose: () => void }>
                       </p>
                     )}
 
+                    {/* CARTE D'ACHAT & FACTURE TÉLÉCHARGEABLE DANS LE CHAT */}
+                    {(() => {
+                      const matchingOrder = orders.find(
+                        (o) =>
+                          o.id === msg.orderId ||
+                          (msg.text && o.orderNumber && msg.text.includes(o.orderNumber))
+                      );
+                      if (!matchingOrder && !msg.orderId) return null;
+                      const ord = matchingOrder;
+                      return (
+                        <div className="mt-3 p-3 rounded-xl bg-slate-950/90 border-2 border-red-500/60 text-left space-y-2 shadow-inner">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[11px] font-black text-red-400 flex items-center gap-1.5">
+                              <FileText className="w-4 h-4 text-red-500" />
+                              <span>Facture Officielle {ord ? ord.orderNumber : ''}</span>
+                            </span>
+                            {ord && (
+                              <span className="font-mono text-xs font-black text-emerald-400">
+                                ${ord.total.toFixed(2)} USD
+                              </span>
+                            )}
+                          </div>
+                          {ord && (
+                            <p className="text-[10px] text-slate-300 leading-tight">
+                              {ord.items.length} article(s) • Expédition : {ord.shippingSchedule}
+                              {ord.isDepositRequired ? ` • Acompte 70% : $${ord.depositAmount.toFixed(2)}` : ' • Réglé'}
+                            </p>
+                          )}
+                          {onOpenReceipt && ord && (
+                            <button
+                              type="button"
+                              onClick={() => onOpenReceipt(ord)}
+                              className="w-full py-2 px-3 bg-red-600 hover:bg-red-500 text-white rounded-lg text-xs font-black transition flex items-center justify-center gap-2 shadow-md cursor-pointer active:scale-95"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                              <span>Télécharger la Facture / Reçu PDF</span>
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })()}
+
                     {/* PHOTOS JOINTES */}
                     <ChatMessageBubbleImages
                       images={msg.images}
@@ -226,7 +331,7 @@ export const InSiteChatModal: React.FC<{ isOpen: boolean; onClose: () => void }>
                   <span className="text-[10px] text-slate-500 mt-1 px-1 font-mono flex items-center gap-1">
                     <span>{isFromAdmin ? '👑 Administrateur' : '👤 Vous'}</span>
                     <span>•</span>
-                    <span>{msg.createdAt.substring(11, 16)}</span>
+                    <span>{formatFriendlyDateTime(msg.createdAt)}</span>
                   </span>
                 </div>
               );

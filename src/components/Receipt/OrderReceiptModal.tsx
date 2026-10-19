@@ -26,19 +26,11 @@ export const OrderReceiptModal: React.FC<Props> = ({ order, isOpen, onClose }) =
     );
 
   const handlePrint = () => {
-    if (!isAccepted) {
-      alert("⚠️ Téléchargement bloqué : Votre reçu officiel ne sera disponible au téléchargement qu'une fois votre commande officiellement acceptée par l'administration HOUSSETECH.");
-      return;
-    }
     window.print();
   };
 
-  // Generate real downloadable PDF with jsPDF (uniquement si acceptée)
+  // Generate real downloadable PDF with jsPDF (facture ou reçu officiel)
   const handleDownloadPDF = () => {
-    if (!isAccepted) {
-      alert("⚠️ Téléchargement bloqué : Votre reçu officiel ne sera disponible au téléchargement qu'une fois votre commande officiellement acceptée par l'administration HOUSSETECH.");
-      return;
-    }
     try {
       setIsGeneratingPdf(true);
       const doc = new jsPDF({
@@ -415,40 +407,25 @@ Ce reçu officiel certifie l'authenticité de vos pièces commandées chez HOUSS
           </div>
 
           <div className="flex items-center gap-2">
-            {isAccepted ? (
-              <button
-                onClick={handleDownloadPDF}
-                disabled={isGeneratingPdf}
-                className="px-3.5 py-1.5 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-black flex items-center gap-1.5 transition shadow-md active:scale-95 disabled:opacity-50"
-                title="Télécharger le fichier PDF officiel (Commande acceptée)"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span>{isGeneratingPdf ? 'Génération...' : 'Télécharger PDF'}</span>
-              </button>
-            ) : (
-              <button
-                disabled
-                className="px-3.5 py-1.5 bg-slate-800 text-slate-400 border border-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 cursor-not-allowed opacity-75"
-                title="Téléchargement verrouillé : commande en cours de vérification par l'administration"
-              >
-                <Lock className="w-3.5 h-3.5 text-amber-400" />
-                <span>Téléchargement verrouillé</span>
-              </button>
-            )}
+            <button
+              onClick={handleDownloadPDF}
+              disabled={isGeneratingPdf}
+              className="px-3.5 py-1.5 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-black flex items-center gap-1.5 transition shadow-md active:scale-95 disabled:opacity-50 cursor-pointer"
+              title="Télécharger la facture ou reçu officiel en fichier PDF"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>{isGeneratingPdf ? 'Génération...' : isAccepted ? 'Télécharger Reçu PDF' : 'Télécharger Facture PDF'}</span>
+            </button>
 
             <button
               onClick={handlePrint}
-              disabled={!isAccepted}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition ${
-                isAccepted
-                  ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer'
-                  : 'bg-slate-800/60 text-slate-500 cursor-not-allowed opacity-60'
-              }`}
-              title={isAccepted ? 'Imprimer ou enregistrer via le navigateur' : "Disponible après acceptation par l'administration"}
+              className="px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer"
+              title="Imprimer ou enregistrer via le navigateur"
             >
-              <Printer className="w-3.5 h-3.5 text-slate-300" />
+              <Printer className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Imprimer</span>
             </button>
+
 
             <button
               onClick={onClose}
@@ -675,47 +652,29 @@ Ce reçu officiel certifie l'authenticité de vos pièces commandées chez HOUSS
 
         {/* Modal Bottom Actions */}
         <div className="mt-4 flex flex-col sm:flex-row gap-2 print:hidden">
-          {isAccepted ? (
-            <>
-              <button
-                onClick={handleDownloadPDF}
-                disabled={isGeneratingPdf}
-                className="flex-1 py-2.5 px-3 bg-red-600 hover:bg-red-500 text-white font-black text-xs rounded-xl shadow-md transition flex items-center justify-center gap-1.5 active:scale-95 disabled:opacity-50"
-              >
-                <Download className="w-4 h-4" />
-                <span>
-                  {isGeneratingPdf
-                    ? 'Génération du PDF en cours...'
-                    : 'Télécharger le PDF du Reçu (Preuve officielle)'}
-                </span>
-              </button>
+          <button
+            onClick={handleDownloadPDF}
+            disabled={isGeneratingPdf}
+            className="flex-1 py-3 px-4 bg-red-600 hover:bg-red-500 text-white font-black text-xs sm:text-sm rounded-xl shadow-lg shadow-red-600/30 transition flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50 cursor-pointer"
+          >
+            <Download className="w-4 h-4" />
+            <span>
+              {isGeneratingPdf
+                ? 'Génération du PDF en cours...'
+                : isAccepted
+                ? 'Télécharger le Reçu Officiel Validé (PDF)'
+                : 'Télécharger la Facture Officielle / Bon de Commande (PDF)'}
+            </span>
+          </button>
 
-              <button
-                onClick={handleSendWhatsAppReceipt}
-                className="py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-1.5"
-                title={`Envoyer le reçu au client (${order.customerPhone}) et à la boutique`}
-              >
-                <MessageSquare className="w-4 h-4" />
-                <span>Envoyer sur WhatsApp Client ({order.customerPhone})</span>
-              </button>
-            </>
-          ) : (
-            <div className="w-full flex flex-col sm:flex-row items-center justify-between gap-3 p-3 bg-slate-800/90 border border-slate-700 rounded-xl text-xs">
-              <div className="flex items-center gap-2 text-amber-300">
-                <Lock className="w-4 h-4 shrink-0 text-amber-400" />
-                <span>
-                  <strong>Téléchargement non autorisé pour le moment :</strong> Cette commande est en attente d'examen et d'acceptation par l'administration HOUSSETECH.
-                </span>
-              </div>
-              <button
-                disabled
-                className="px-4 py-2 bg-slate-700 text-slate-400 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-not-allowed shrink-0"
-              >
-                <Lock className="w-3.5 h-3.5" />
-                <span>Reçu en attente</span>
-              </button>
-            </div>
-          )}
+          <button
+            onClick={handleSendWhatsAppReceipt}
+            className="py-3 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md transition flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+            title={`Transmettre sur WhatsApp (${order.customerPhone})`}
+          >
+            <MessageSquare className="w-4 h-4" />
+            <span>Envoyer sur WhatsApp ({order.customerPhone})</span>
+          </button>
         </div>
       </div>
     </div>

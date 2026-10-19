@@ -28,6 +28,7 @@ import {
   CheckCircle2,
   DollarSign,
   Phone,
+  MessageSquare,
   MessageCircle,
   Filter,
   Package,
@@ -60,6 +61,8 @@ function StoreContent() {
     getWhatsAppUrl,
     newCustomerToast,
     dismissNewCustomerToast,
+    newChatToast,
+    dismissNewChatToast,
   } = useStore();
 
   // Détection des liens partagés (?register=true, ?login=true, etc.)
@@ -93,6 +96,8 @@ function StoreContent() {
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [isAdminAuthOpen, setIsAdminAuthOpen] = useState(false);
+  const [adminInitialTab, setAdminInitialTab] = useState<'stocks' | 'orders' | 'products' | 'chat' | 'customers' | 'settings'>('stocks');
+  const [adminInitialChatCustomerId, setAdminInitialChatCustomerId] = useState<string | undefined>(undefined);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isTrackingOpen, setIsTrackingOpen] = useState(false);
   const [trackingInitialTab, setTrackingInitialTab] = useState<'orders' | 'tracking' | 'chat' | 'faq'>('orders');
@@ -212,6 +217,58 @@ function StoreContent() {
               className="py-2 px-3 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl transition cursor-pointer"
             >
               Ignorer
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Notification instantanée de message client pour l'administrateur */}
+      {isAdmin && newChatToast && (
+        <div className="fixed top-20 right-4 left-4 sm:left-auto sm:w-96 z-50 bg-slate-900 border-2 border-emerald-500/90 shadow-2xl rounded-2xl p-4 text-slate-100 animate-fadeIn flex flex-col gap-2.5">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-center gap-2.5">
+              <span className="p-2.5 rounded-xl bg-emerald-500 text-slate-950 font-black shrink-0">
+                <MessageSquare className="w-5 h-5 animate-pulse" />
+              </span>
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400 block">
+                  💬 Nouveau Message Client Reçu
+                </span>
+                <h4 className="text-sm font-bold text-white leading-tight">
+                  {newChatToast.message.customerName}
+                </h4>
+                <p className="text-[11px] text-slate-300 line-clamp-2 mt-0.5">
+                  « {newChatToast.message.text} »
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={dismissNewChatToast}
+              className="text-slate-400 hover:text-white p-1 rounded-lg"
+              title="Fermer la notification"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2 pt-2 border-t border-slate-800">
+            <button
+              onClick={() => {
+                const targetCustId = newChatToast.message.customerId;
+                dismissNewChatToast();
+                setAdminInitialTab('chat');
+                setAdminInitialChatCustomerId(targetCustId);
+                setIsAdminOpen(true);
+              }}
+              className="flex-1 py-2 px-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs rounded-xl shadow-md transition text-center cursor-pointer active:scale-98"
+            >
+              Répondre au client
+            </button>
+            <button
+              onClick={dismissNewChatToast}
+              className="py-2 px-3 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl transition cursor-pointer"
+            >
+              Fermer
             </button>
           </div>
         </div>
@@ -582,12 +639,17 @@ function StoreContent() {
 
       {/* Panneau Administration HOUSSETECH */}
       {isAdminOpen && (
-        <AdminDashboard onClose={() => setIsAdminOpen(false)} />
+        <AdminDashboard
+          onClose={() => setIsAdminOpen(false)}
+          initialTab={adminInitialTab}
+          initialChatCustomerId={adminInitialChatCustomerId}
+        />
       )}
 
       <InSiteChatModal
         isOpen={isChatOpen}
         onClose={() => setIsChatOpen(false)}
+        onOpenReceipt={handleOpenReceipt}
       />
 
       <OrderTrackingModal
