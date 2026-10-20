@@ -133,7 +133,8 @@ interface StoreContextType {
     sender?: 'client' | 'admin',
     images?: string[]
   ) => void;
-  markChatAsRead: (customerId: string) => void;
+  markChatAsRead: (customerId: string, phone?: string) => void;
+  markAllChatAsRead: () => void;
 
   // WhatsApp shortcut
   getWhatsAppUrl: (customText?: string) => string;
@@ -214,10 +215,51 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   });
 
+// Helpers de persistance locale pour éviter la réapparition de commandes refusées/supprimées
+const getDeletedOrderIds = (): Set<string> => {
+  try {
+    const raw = localStorage.getItem('houssetech_deleted_order_ids');
+    return raw ? new Set(JSON.parse(raw)) : new Set<string>();
+  } catch {
+    return new Set<string>();
+  }
+};
+
+const addDeletedOrderId = (orderId: string) => {
+  try {
+    const set = getDeletedOrderIds();
+    set.add(orderId);
+    localStorage.setItem('houssetech_deleted_order_ids', JSON.stringify(Array.from(set)));
+  } catch (err) {
+    console.warn('Erreur sauvegarde deleted order id:', err);
+  }
+};
+
+const getReadMessageIds = (): Set<string> => {
+  try {
+    const raw = localStorage.getItem('houssetech_read_msg_ids');
+    return raw ? new Set(JSON.parse(raw)) : new Set<string>();
+  } catch {
+    return new Set<string>();
+  }
+};
+
+const saveReadMessageIds = (ids: string[]) => {
+  try {
+    const set = getReadMessageIds();
+    ids.forEach((id) => set.add(id));
+    localStorage.setItem('houssetech_read_msg_ids', JSON.stringify(Array.from(set)));
+  } catch (err) {
+    console.warn('Erreur sauvegarde read msg ids:', err);
+  }
+};
+
   const [orders, setOrders] = useState<Order[]>(() => {
     try {
+      const deletedIds = getDeletedOrderIds();
       const saved = localStorage.getItem(LOCAL_STORAGE_KEYS.ORDERS);
-      return saved ? JSON.parse(saved) : INITIAL_ORDERS;
+      const list: Order[] = saved ? JSON.parse(saved) : INITIAL_ORDERS;
+      return list.filter((o) => !deletedIds.has(o.id) && o.status !== 'refusee' && o.adminDecision !== 'refusee');
     } catch {
       return INITIAL_ORDERS;
     }
@@ -415,7 +457,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
       }
 
-      // --- Fusion Messages Chat (Aucun écrasement, Firestore prioritaire) ---
+      // --- Fusion Messages Chat (Préserve l'état "lu" local pour éviter tout clignotement intempestif) ---
       const chatMap = new Map<string, ChatMessage>();
       if (data && Array.isArray(data.chatMessages)) {
         data.chatMessages.forEach((m) => chatMap.set(m.id, m));
@@ -423,31 +465,52 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (Array.isArray(firestoreChat) && firestoreChat.length > 0) {
         firestoreChat.forEach((m) => chatMap.set(m.id, m));
       }
-      const mergedChat = Array.from(chatMap.values());
-      if (mergedChat.length > 0) {
-        mergedChat.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
-        setChatMessages(mergedChat);
-        previousChatIdsRef.current = new Set(mergedChat.map((m) => m.id));
-      }
 
-      // --- Fusion Commandes (Aucun écrasement, Firestore prioritaire) ---
+      setChatMessages((prev) => {
+        const readIds = new Set(prev.filter((m) => m.read).map((m) => m.id));
+        const mergedChat = Array.from(chatMap.values()).map((m) =>
+          readIds.has(m.id) ? { ...m, read: true } : m
+        );
+        if (mergedChat.length > 0) {
+          mergedChat.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+          previousChatIdsRef.current = new Set(mergedChat.map((m) => m.id));
+          return mergedChat;
+        }
+        return prev;
+      });
+
+      // --- Fusion Commandes (Les commandes refusées sont totalement exclues de la liste) ---
+      const deletedIds = getDeletedOrderIds();
       const orderMap = new Map<string, Order>();
       if (data && Array.isArray(data.orders)) {
-        data.orders.forEach((o) => orderMap.set(o.id, o));
+        data.orders.forEach((o) => {
+          if (!deletedIds.has(o.id) && o.status !== 'refusee' && o.adminDecision !== 'refusee') {
+            orderMap.set(o.id, o);
+          }
+        });
       }
       if (Array.isArray(firestoreOrders) && firestoreOrders.length > 0) {
-        firestoreOrders.forEach((o) => orderMap.set(o.id, o));
+        firestoreOrders.forEach((o) => {
+          if (!deletedIds.has(o.id) && o.status !== 'refusee' && o.adminDecision !== 'refusee') {
+            orderMap.set(o.id, o);
+          }
+        });
       }
       const mergedOrders = Array.from(orderMap.values());
-      if (mergedOrders.length > 0) {
-        mergedOrders.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
-        setOrders(mergedOrders);
-      }
+      mergedOrders.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+      setOrders(mergedOrders);
 
       if (data) {
         if (data.settings) setSettings(data.settings);
         if (Array.isArray(data.products) && data.products.length > 0) setProducts(data.products);
-        if (Array.isArray(data.notifications)) setNotifications(data.notifications);
+        if (Array.isArray(data.notifications)) {
+          setNotifications((prev) => {
+            const readNotifIds = new Set(prev.filter((n) => n.read).map((n) => n.id));
+            return data.notifications.map((n) =>
+              readNotifIds.has(n.id) ? { ...n, read: true } : n
+            );
+          });
+        }
       }
       isFirstSyncRef.current = false;
     } catch (err) {
@@ -498,25 +561,28 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     });
 
     const unsubOrders = firestoreService.subscribeOrders((freshOrders) => {
-      if (freshOrders && freshOrders.length > 0) {
-        setOrders((prev) => {
-          const map = new Map<string, Order>();
-          prev.forEach((o) => map.set(o.id, o));
-          freshOrders.forEach((o) => map.set(o.id, o));
-          const list = Array.from(map.values());
-          list.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
-          return list;
-        });
+      const deletedIds = getDeletedOrderIds();
+      if (Array.isArray(freshOrders)) {
+        setOrders(
+          freshOrders
+            .filter((o) => !deletedIds.has(o.id) && o.status !== 'refusee' && o.adminDecision !== 'refusee')
+            .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
+        );
       }
     });
 
     // 3. Écoute instantanée des messages clients : apparaît sur le téléphone de l'administrateur dès l'envoi
     const unsubChat = firestoreService.subscribeChatMessages((freshMessages) => {
+      const persistedReadIds = getReadMessageIds();
       if (freshMessages && freshMessages.length > 0) {
         setChatMessages((prev) => {
           const map = new Map<string, ChatMessage>();
+          const readIds = new Set(prev.filter((m) => m.read).map((m) => m.id));
           prev.forEach((m) => map.set(m.id, m));
-          freshMessages.forEach((m) => map.set(m.id, m));
+          freshMessages.forEach((m) => {
+            const isRead = m.read || readIds.has(m.id) || persistedReadIds.has(m.id);
+            map.set(m.id, isRead ? { ...m, read: true } : m);
+          });
           const list = Array.from(map.values());
           list.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
           return list;
@@ -1221,28 +1287,31 @@ ${newOrder.isDepositRequired ? `🔴 Acompte 70% : $${newOrder.depositAmount.toF
 
   const rejectOrder = (orderId: string, reason?: string) => {
     const finalReason = reason || 'Article indisponible ou acompte non conforme.';
-    let rejectedObj: Order | undefined;
-    setOrders((prev) =>
-      prev.map((o) => {
-        if (o.id === orderId) {
-          rejectedObj = {
-            ...o,
-            adminDecision: 'refusee',
-            status: 'refusee',
-            adminDecisionReason: finalReason,
-          };
-          return rejectedObj;
-        }
-        return o;
-      })
-    );
-    api.updateOrder(orderId, {
-      adminDecision: 'refusee',
-      status: 'refusee',
-      adminDecisionReason: finalReason,
-    }).catch(console.warn);
-    if (rejectedObj) {
-      firestoreService.saveOrder(rejectedObj).catch(console.warn);
+    const orderToDelete = orders.find((o) => o.id === orderId);
+
+    // Enregistrer l'ID comme définitivement supprimé pour éviter toute résurrection
+    addDeletedOrderId(orderId);
+
+    // Supprimer immédiatement de la liste locale des commandes
+    setOrders((prev) => prev.filter((o) => o.id !== orderId));
+
+    // Suppression définitive du serveur central et de Firestore
+    api.deleteOrder(orderId).catch(console.warn);
+    firestoreService.deleteOrder(orderId).catch(console.warn);
+
+    // Supprimer toute notification liée à cette commande
+    setNotifications((prev) => prev.filter((n) => n.orderId !== orderId));
+
+    // Envoi de la notification directe dans la messagerie du client
+    if (orderToDelete) {
+      const targetCustId = orderToDelete.customerId || `cust-${orderToDelete.customerPhone.replace(/[^0-9]/g, '')}`;
+      sendChatMessage(
+        `❌ COMMANDE REFUSÉE & SUPPRIMÉE : La commande N° ${orderToDelete.orderNumber} a été refusée par la direction.\nMotif : ${finalReason}`,
+        targetCustId,
+        orderToDelete.customerName,
+        orderToDelete.customerPhone,
+        'admin'
+      );
     }
   };
 
@@ -1344,15 +1413,42 @@ ${newOrder.isDepositRequired ? `🔴 Acompte 70% : $${newOrder.depositAmount.toF
     }).catch((err) => console.warn('Erreur envoi message serveur:', err));
   };
 
-  const markChatAsRead = (customerId: string) => {
+  const markChatAsRead = (customerId: string, optionalPhone?: string) => {
+    const cust = customers.find((c) => c.id === customerId);
+    const cleanCustPhone = (optionalPhone || cust?.phone || '').replace(/[^0-9]/g, '');
+
+    const readIdsToSave: string[] = [];
     setChatMessages((prev) =>
-      prev.map((m) =>
-        m.customerId === customerId
-          ? { ...m, read: true }
-          : m
-      )
+      prev.map((m) => {
+        const cleanMsgPhone = (m.customerPhone || '').replace(/[^0-9]/g, '');
+        const isMatch =
+          m.customerId === customerId ||
+          (cleanCustPhone && cleanMsgPhone && cleanCustPhone === cleanMsgPhone);
+        if (isMatch) {
+          readIdsToSave.push(m.id);
+          return { ...m, read: true };
+        }
+        return m;
+      })
     );
+
+    if (readIdsToSave.length > 0) {
+      saveReadMessageIds(readIdsToSave);
+    }
+
+    // Marquer les notifications associées comme lues pour arrêter tout clignotement
+    setNotifications((prev) =>
+      prev.map((n) => (n.customerId === customerId ? { ...n, read: true } : n))
+    );
+
     api.markChatRead(customerId).catch(console.warn);
+    firestoreService.markChatAsRead(customerId, cleanCustPhone).catch(console.warn);
+  };
+
+  const markAllChatAsRead = () => {
+    setChatMessages((prev) => prev.map((m) => ({ ...m, read: true })));
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    fetch('/api/chat/read-all', { method: 'PATCH' }).catch(console.warn);
   };
 
   // Settings & Admin
@@ -1471,6 +1567,7 @@ ${newOrder.isDepositRequired ? `🔴 Acompte 70% : $${newOrder.depositAmount.toF
         submitOrderRating,
         sendChatMessage,
         markChatAsRead,
+        markAllChatAsRead,
         getWhatsAppUrl,
         updateSettings,
         updateAdminPassword,

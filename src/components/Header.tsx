@@ -123,7 +123,7 @@ export const Header: React.FC<Props> = ({
             >
               <Menu className="w-5 h-5 text-red-500" />
               {isAdmin && pendingVerificationCustomersCount > 0 && (
-                <span className="absolute -top-1 -right-1 px-1.5 py-0.2 bg-amber-500 text-slate-950 rounded-full text-[9px] font-black animate-pulse shadow-md">
+                <span className="absolute -top-1 -right-1 px-1.5 py-0.2 bg-amber-500 text-slate-950 rounded-full text-[9px] font-black shadow-md">
                   {pendingVerificationCustomersCount}
                 </span>
               )}
@@ -268,7 +268,7 @@ export const Header: React.FC<Props> = ({
             {isAdmin && pendingVerificationCustomersCount > 0 && onOpenAdmin && (
               <button
                 onClick={onOpenAdmin}
-                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs shadow-md shadow-amber-500/30 transition animate-pulse cursor-pointer shrink-0"
+                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs shadow-md shadow-amber-500/30 transition cursor-pointer shrink-0"
                 title={`${pendingVerificationCustomersCount} client(s) à consulter`}
               >
                 <Bell className="w-3.5 h-3.5" />
@@ -650,7 +650,7 @@ export const Header: React.FC<Props> = ({
                     <span>Fiche de Messagerie</span>
                   </span>
                   {unreadMessagesCount > 0 && (
-                    <span className="px-2 py-0.5 bg-red-600 text-white rounded-full text-[10px] font-black animate-pulse">
+                    <span className="px-2 py-0.5 bg-red-600 text-white rounded-full text-[10px] font-black shadow-sm">
                       {unreadMessagesCount} non lu{unreadMessagesCount > 1 ? 's' : ''}
                     </span>
                   )}

@@ -229,6 +229,15 @@ export const firestoreService = {
     }
   },
 
+  async deleteOrder(orderId: string): Promise<void> {
+    try {
+      await deleteDoc(doc(db, ORDERS_COL, orderId));
+      console.log(`[Firestore] Commande ${orderId} supprimée de Firestore.`);
+    } catch (err) {
+      console.error('[Firestore] Erreur suppression commande Firestore:', err);
+    }
+  },
+
   // 3. Écoute en temps réel de la Messagerie instantanée (Clients & Direction)
   subscribeChatMessages(callback: (messages: ChatMessage[]) => void) {
     try {
@@ -277,13 +286,18 @@ export const firestoreService = {
     }
   },
 
-  async markChatAsRead(customerId: string): Promise<void> {
+  async markChatAsRead(customerId: string, phone?: string): Promise<void> {
     try {
+      const cleanTargetPhone = (phone || '').replace(/[^0-9]/g, '');
       const snapshot = await getDocs(collection(db, CHAT_COL));
       const promises: Promise<any>[] = [];
       snapshot.forEach((d) => {
         const data = d.data() as ChatMessage;
-        if (data.customerId === customerId && !data.read) {
+        const msgPhone = (data.customerPhone || '').replace(/[^0-9]/g, '');
+        const isMatch =
+          data.customerId === customerId ||
+          (cleanTargetPhone && msgPhone && cleanTargetPhone === msgPhone);
+        if (isMatch && !data.read) {
           promises.push(setDoc(doc(db, CHAT_COL, d.id), { read: true }, { merge: true }));
         }
       });

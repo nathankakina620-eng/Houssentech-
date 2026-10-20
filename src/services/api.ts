@@ -137,6 +137,19 @@ export const api = {
     }
   },
 
+  // Suppression d'une commande (ex: commande refusée)
+  async deleteOrder(orderId: string): Promise<boolean> {
+    try {
+      const res = await fetch(`${API_BASE}/orders/${orderId}`, {
+        method: 'DELETE',
+      });
+      return res.ok;
+    } catch (err) {
+      console.error('[API deleteOrder] Erreur:', err);
+      return false;
+    }
+  },
+
   // 7. Envoi de message ou de photo dans la messagerie
   async sendChatMessage(msg: {
     id?: string;

@@ -48,6 +48,9 @@ import {
   FileText,
   Bell,
   ArrowRight,
+  ArrowLeft,
+  ChevronRight,
+  User,
   MapPin,
   ShieldAlert,
 } from 'lucide-react';
@@ -115,9 +118,10 @@ export const AdminDashboard: React.FC<{
     refreshData,
   } = useStore();
 
-  // Tabs: added 'stocks'
   const [activeTab, setActiveTab] = useState<'stocks' | 'orders' | 'products' | 'chat' | 'customers' | 'settings'>(initialTab || 'stocks');
   const [selectedReceiptOrder, setSelectedReceiptOrder] = useState<Order | null>(null);
+  const [orderToReject, setOrderToReject] = useState<Order | null>(null);
+  const [rejectReason, setRejectReason] = useState<string>('Article indisponible ou acompte non conforme');
 
   useEffect(() => {
     if (initialTab) {
@@ -163,17 +167,24 @@ export const AdminDashboard: React.FC<{
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [orderFilter, setOrderFilter] = useState<string>('all');
 
-  // Chat in admin state
-  const [selectedChatCustomerId, setSelectedChatCustomerId] = useState<string>(
-    initialChatCustomerId || customers[0]?.id || 'guest-current'
+  // Chat in admin state: null affiche la liste plein écran des discussions, un ID client ouvre la conversation plein écran
+  const [selectedChatCustomerId, setSelectedChatCustomerId] = useState<string | null>(
+    initialChatCustomerId || null
   );
   const [chatSearchText, setChatSearchText] = useState('');
+  const adminMessagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (initialChatCustomerId) {
       setSelectedChatCustomerId(initialChatCustomerId);
     }
   }, [initialChatCustomerId]);
+
+  useEffect(() => {
+    if (selectedChatCustomerId) {
+      adminMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [selectedChatCustomerId, chatMessages]);
 
   const [adminReplyText, setAdminReplyText] = useState('');
   const [adminChatImages, setAdminChatImages] = useState<string[]>([]);
@@ -415,6 +426,7 @@ export const AdminDashboard: React.FC<{
 
   const handleSendAdminChatReply = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!selectedChatCustomerId) return;
     if (!adminReplyText.trim() && adminChatImages.length === 0) return;
 
     const targetCustomer = customers.find((c) => c.id === selectedChatCustomerId);
@@ -574,12 +586,6 @@ export const AdminDashboard: React.FC<{
     return list;
   }, [chatMessages, customers, chatSearchText]);
 
-  // Si aucun client n'est encore sélectionné, sélectionner le premier avec messages ou le plus récent
-  useEffect(() => {
-    if (!selectedChatCustomerId && chatConversations.length > 0) {
-      setSelectedChatCustomerId(chatConversations[0].id);
-    }
-  }, [selectedChatCustomerId, chatConversations]);
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950 text-slate-100 flex flex-col overflow-hidden animate-fadeIn">
@@ -658,7 +664,7 @@ export const AdminDashboard: React.FC<{
           <Boxes className="w-4 h-4 text-emerald-400" />
           <span>Gestion du Stock ({inStockProductsCount} dispo)</span>
           {outOfStockProductsCount > 0 && (
-            <span className="px-1.5 py-0.2 bg-rose-600 text-white text-[10px] rounded-full font-black animate-pulse">
+            <span className="px-1.5 py-0.2 bg-rose-600 text-white text-[10px] rounded-full font-black">
               {outOfStockProductsCount} rupture{outOfStockProductsCount > 1 ? 's' : ''}
             </span>
           )}
@@ -675,24 +681,27 @@ export const AdminDashboard: React.FC<{
           <ShoppingBag className="w-4 h-4" />
           <span>Commandes & Acomptes ({orders.length})</span>
           {pendingApprovalOrders.length > 0 && (
-            <span className="px-1.5 py-0.2 bg-red-600 text-white text-[10px] rounded-full font-black animate-pulse">
+            <span className="px-1.5 py-0.2 bg-red-600 text-white text-[10px] rounded-full font-black">
               {pendingApprovalOrders.length} à décider
             </span>
           )}
         </button>
 
         <button
-          onClick={() => setActiveTab('chat')}
+          onClick={() => {
+            setActiveTab('chat');
+            setSelectedChatCustomerId(null);
+          }}
           className={`py-3 px-3.5 text-xs font-bold flex items-center gap-2 border-b-2 transition whitespace-nowrap relative ${
             activeTab === 'chat'
               ? 'border-red-500 text-white'
               : 'border-transparent text-slate-400 hover:text-slate-200'
           }`}
         >
-          <MessageSquare className="w-4 h-4" />
-          <span>Messagerie Clients</span>
+          <MessageSquare className="w-4 h-4 text-red-500" />
+          <span>Discussions Clients</span>
           {unreadChatMessagesCount > 0 ? (
-            <span className="px-2 py-0.5 rounded-full bg-red-600 text-white text-[10px] font-black animate-pulse shadow-sm shadow-red-600/50">
+            <span className="px-2 py-0.5 rounded-full bg-red-600 text-white text-[10px] font-black shadow-sm">
               {unreadChatMessagesCount} nouveau{unreadChatMessagesCount > 1 ? 'x' : ''}
             </span>
           ) : (
@@ -743,9 +752,9 @@ export const AdminDashboard: React.FC<{
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-950">
+      <div className={`flex-1 bg-slate-950 ${activeTab === 'chat' ? 'p-0 overflow-hidden flex flex-col h-full w-full' : 'overflow-y-auto p-4 sm:p-6'}`}>
         {/* Bannière d'alerte en direct : Inscriptions clients reçues sur la base de données */}
-        {blockedCustomers.length > 0 && (
+        {activeTab !== 'chat' && blockedCustomers.length > 0 && (
           <div className="mb-4 p-3.5 bg-gradient-to-r from-rose-950/80 via-rose-900/60 to-rose-950/80 border border-rose-500/50 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xl animate-fadeIn">
             <div className="flex items-center gap-3">
               <div className="p-2.5 bg-rose-600 text-white rounded-xl font-bold shadow-md">
@@ -1127,19 +1136,18 @@ export const AdminDashboard: React.FC<{
 
                         <button
                           onClick={() => {
-                            const reason = prompt('Motif du refus de la commande :', 'Article indisponible ou acompte manquant');
-                            if (reason !== null) {
-                              rejectOrder(ord.id, reason);
-                            }
+                            setOrderToReject(ord);
+                            setRejectReason('Article indisponible ou acompte non conforme');
                           }}
                           className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition active:scale-95 ${
                             ord.adminDecision === 'refusee'
                               ? 'bg-rose-600 text-white'
                               : 'bg-rose-950/60 hover:bg-rose-900 border border-rose-600/40 text-rose-300'
                           }`}
+                          title="Refuser et supprimer cette commande de la liste"
                         >
                           <XCircle className="w-4 h-4" />
-                          <span>Commande Refusée</span>
+                          <span>Refuser la commande</span>
                         </button>
 
                         <button
@@ -1305,288 +1313,581 @@ export const AdminDashboard: React.FC<{
           </div>
         )}
 
-        {/* ================= TAB 3: INTERNAL CHAT ================= */}
+        {/* ================= TAB 3: INTERNAL CHAT (STYLE WHATSAPP & MESSENGER EN PLEIN ÉCRAN) ================= */}
         {activeTab === 'chat' && (
-          <div className="max-w-5xl mx-auto h-[600px] bg-slate-900 rounded-2xl border border-slate-800 flex overflow-hidden">
-            <div className="w-1/3 min-w-[260px] max-w-[340px] border-r border-slate-800 flex flex-col bg-slate-950/70">
-              <div className="p-3 border-b border-slate-800 flex flex-col gap-2 bg-slate-950">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                    <MessageSquare className="w-4 h-4 text-red-500" />
-                    <span>Discussions Clients ({chatConversations.length})</span>
-                  </span>
-                  {unreadChatMessagesCount > 0 && (
-                    <span className="px-2 py-0.5 rounded-full bg-red-600 text-white text-[10px] font-black animate-pulse">
-                      {unreadChatMessagesCount} non lu{unreadChatMessagesCount > 1 ? 's' : ''}
-                    </span>
-                  )}
-                </div>
-                <div className="relative">
-                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    placeholder="Chercher par nom ou numéro..."
-                    value={chatSearchText}
-                    onChange={(e) => setChatSearchText(e.target.value)}
-                    className="w-full pl-8 pr-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-red-500"
-                  />
-                </div>
-              </div>
-
-              <div className="flex-1 overflow-y-auto divide-y divide-slate-800/60">
-                {chatConversations.length === 0 ? (
-                  <div className="p-6 text-center text-xs text-slate-500">
-                    Aucune discussion trouvée.
-                  </div>
-                ) : (
-                  chatConversations.map((item) => {
-                    const isSelected = selectedChatCustomerId === item.id;
-                    const isBlocked = item.customer?.status === 'bloque' || item.customer?.isBlocked;
-                    return (
-                      <button
-                        key={item.id}
-                        onClick={() => {
-                          setSelectedChatCustomerId(item.id);
-                          markChatAsRead(item.id);
-                        }}
-                        className={`w-full text-left p-3 hover:bg-slate-800/80 transition flex items-start gap-2.5 ${
-                          isSelected ? 'bg-slate-800 border-l-4 border-red-500' : ''
-                        }`}
-                      >
-                        <div className={`w-8 h-8 rounded-xl shrink-0 flex items-center justify-center font-black text-xs border ${
-                          isBlocked
-                            ? 'bg-rose-950 border-rose-600 text-rose-300'
-                            : item.hasUnread
-                            ? 'bg-emerald-950 border-emerald-500 text-emerald-300'
-                            : 'bg-slate-800 border-slate-700 text-slate-300'
-                        }`}>
-                          {item.clientName.substring(0, 2).toUpperCase()}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center justify-between gap-1">
-                            <p className="font-bold text-xs text-white truncate">{item.clientName}</p>
-                            {item.lastTime && (
-                              <span className="text-[10px] text-slate-500 shrink-0 font-mono">
-                                {formatFriendlyDateTime(item.lastTime).replace("Aujourd'hui à ", '')}
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-[10px] text-slate-400 font-mono truncate">{item.clientPhone}</p>
-                          <p className="text-[11px] text-slate-400 truncate mt-0.5">
-                            {item.lastMsg?.text || (item.lastMsg?.images ? '📷 Photo reçue' : 'Nouveau client inscrit')}
-                          </p>
-                        </div>
-                        {item.hasUnread && (
-                          <span className="px-1.5 py-0.5 rounded-full bg-red-600 text-white text-[10px] font-black shrink-0 animate-pulse">
-                            {item.unreadCount}
+          <div className="w-full h-full flex-1 flex flex-col overflow-hidden bg-slate-950">
+            {!selectedChatCustomerId ? (
+              /* ================= ÉCRAN 1 : LISTE DES DISCUSSIONS CLIENTS EN PLEIN ÉCRAN ================= */
+              <div className="flex-1 flex flex-col bg-slate-950 overflow-hidden">
+                {/* En-tête de la liste */}
+                <div className="p-4 sm:p-5 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-900 shrink-0">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-red-600 to-rose-700 text-white flex items-center justify-center shadow-lg shadow-red-600/30 shrink-0">
+                      <MessageSquare className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-base sm:text-lg font-black text-white">
+                          Discussions Clients ({chatConversations.length})
+                        </h2>
+                        {unreadChatMessagesCount > 0 && (
+                          <span className="px-2.5 py-0.5 rounded-full bg-red-600 text-white text-xs font-black shadow-md shadow-red-600/40">
+                            {unreadChatMessagesCount} non lu{unreadChatMessagesCount > 1 ? 's' : ''}
                           </span>
                         )}
-                      </button>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-
-            <div className="flex-1 flex flex-col bg-slate-900">
-              {(() => {
-                const activeConv = chatConversations.find((c) => c.id === selectedChatCustomerId);
-                const activeCust = activeConv?.customer || customers.find((c) => c.id === selectedChatCustomerId);
-                const displayName = activeCust?.fullName || activeConv?.clientName || 'Client';
-                const displayPhone = activeCust?.phone || activeConv?.clientPhone || '';
-                const displayCity = activeCust?.city || '';
-                return (
-                  <div className="p-3 border-b border-slate-800 flex items-center justify-between gap-2 bg-slate-900/90">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="w-8 h-8 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center font-black text-xs text-slate-200 shrink-0">
-                        {displayName.substring(0, 2).toUpperCase()}
                       </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <h3 className="text-xs font-bold text-white truncate">{displayName}</h3>
-                          {activeCust?.status === 'valide' && (
-                            <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.2 rounded border border-emerald-500/30">
-                              Actif
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-[10px] text-slate-400 truncate">
-                          {displayPhone} {displayCity ? `• ${displayCity}` : ''}
-                        </p>
-                      </div>
+                      <p className="text-xs text-slate-400">
+                        Cliquez sur un client pour ouvrir sa conversation en plein écran (Style WhatsApp / Facebook)
+                      </p>
                     </div>
                   </div>
-                );
-              })()}
 
-              {/* Message officiel des horaires (Lun-Ven 8h-16h30, Sam 8h-14h) et modes de travail épinglé */}
-              <EnterpriseWorkingHoursBanner compact={true} />
-
-              <div className="flex-1 p-4 overflow-y-auto space-y-4 bg-slate-950/70 text-xs">
-                {chatMessages
-                  .filter((m) => {
-                    if (m.customerId === selectedChatCustomerId) return true;
-                    const cust = customers.find((c) => c.id === selectedChatCustomerId);
-                    const cleanCustPhone = (cust?.phone || '').replace(/[^0-9]/g, '');
-                    const activeConv = chatConversations.find((c) => c.id === selectedChatCustomerId);
-                    const cleanConvPhone = (activeConv?.clientPhone || '').replace(/[^0-9]/g, '');
-                    const targetPhone = cleanCustPhone || cleanConvPhone;
-                    const cleanMsgPhone = (m.customerPhone || '').replace(/[^0-9]/g, '');
-                    if (targetPhone && cleanMsgPhone && targetPhone === cleanMsgPhone) return true;
-                    return false;
-                  })
-                  .map((msg) => {
-                    const isFromAdmin = msg.sender === 'admin';
-                    const matchingOrder = orders.find(
-                      (o) =>
-                        o.id === msg.orderId ||
-                        (msg.text && o.orderNumber && msg.text.includes(o.orderNumber))
-                    );
-
-                    return (
-                      <div
-                        key={msg.id}
-                        className={`flex flex-col ${isFromAdmin ? 'items-end' : 'items-start'}`}
+                  {/* Barre de recherche plein écran */}
+                  <div className="relative w-full sm:w-80">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      placeholder="Chercher par nom, téléphone, mot-clé..."
+                      value={chatSearchText}
+                      onChange={(e) => setChatSearchText(e.target.value)}
+                      className="w-full pl-9 pr-8 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs sm:text-sm text-white placeholder-slate-400 focus:outline-hidden focus:border-red-500 transition"
+                    />
+                    {chatSearchText && (
+                      <button
+                        onClick={() => setChatSearchText('')}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white text-xs cursor-pointer"
+                        title="Effacer la recherche"
                       >
-                        <div
-                          className={`max-w-[85%] p-3.5 rounded-2xl shadow-lg transition ${
-                            isFromAdmin
-                              ? 'bg-gradient-to-br from-red-600 to-rose-700 text-white rounded-tr-xs shadow-red-600/20'
-                              : 'bg-slate-900 text-slate-100 rounded-tl-xs border-2 border-slate-700 shadow-md'
-                          }`}
-                        >
-                          {/* En-tête de bulle très distinctif */}
-                          <div className={`flex items-center gap-2 mb-2 pb-1.5 border-b ${
-                            isFromAdmin ? 'border-white/20 justify-end' : 'border-slate-800'
-                          }`}>
-                            {isFromAdmin ? (
-                              <>
-                                <span className="text-[11px] font-black text-amber-200">
-                                  👑 VOUS (ADMINISTRATEUR)
-                                </span>
-                                <span className="px-1.5 py-0.5 rounded bg-black/30 text-[10px] font-bold text-amber-300">
-                                  Direction
-                                </span>
-                              </>
-                            ) : (
-                              <>
-                                <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold">
-                                  👤 CLIENT
-                                </span>
-                                <span className="text-[11px] font-black text-slate-200">
-                                  {msg.customerName || 'Client'}
-                                </span>
-                              </>
-                            )}
-                          </div>
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                </div>
 
-                          {msg.text && (
-                            <p className="leading-relaxed whitespace-pre-line text-xs sm:text-sm font-normal">
-                              {msg.text}
-                            </p>
-                          )}
+                {/* Bannière officielle */}
+                <EnterpriseWorkingHoursBanner compact={true} />
 
-                          {/* CARTE D'ACHAT & FACTURE TÉLÉCHARGEABLE POUR L'ADMINISTRATEUR */}
-                          {matchingOrder && (
-                            <div className="mt-3 p-3 rounded-xl bg-slate-950/90 border-2 border-red-500/60 text-left space-y-2 shadow-inner">
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="text-[11px] font-black text-red-400 flex items-center gap-1.5">
-                                  <FileText className="w-4 h-4 text-red-500" />
-                                  <span>Facture Officielle {matchingOrder.orderNumber}</span>
-                                </span>
-                                <span className="font-mono text-xs font-black text-emerald-400">
-                                  ${matchingOrder.total.toFixed(2)} USD
-                                </span>
+                {/* Liste des discussions plein écran */}
+                <div className="flex-1 overflow-y-auto p-3 sm:p-5">
+                  {chatConversations.length === 0 ? (
+                    <div className="h-full min-h-[300px] flex flex-col items-center justify-center text-center p-8 text-slate-400 space-y-3">
+                      <div className="p-4 rounded-3xl bg-slate-900 border border-slate-800 text-slate-500">
+                        <MessageSquare className="w-12 h-12" />
+                      </div>
+                      <h3 className="text-base font-bold text-slate-200">
+                        {chatSearchText ? 'Aucun résultat trouvé' : 'Aucune discussion pour le moment'}
+                      </h3>
+                      <p className="text-xs text-slate-400 max-w-sm leading-relaxed">
+                        {chatSearchText
+                          ? `Aucun client ne correspond à votre recherche "${chatSearchText}".`
+                          : 'Les messages de vos clients apparaîtront ici automatiquement dès leur envoi.'}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5">
+                      {chatConversations.map((item) => {
+                        const isBlocked = item.customer?.status === 'bloque' || item.customer?.isBlocked;
+                        const lastMsg = item.lastMsg;
+                        const isLastFromAdmin = lastMsg?.sender === 'admin';
+                        const clientPendingOrders = orders.filter((o) => {
+                          if (o.customerId === item.id) return true;
+                          const cleanItemPhone = (item.clientPhone || '').replace(/[^0-9]/g, '');
+                          const cleanOrderPhone = (o.customerPhone || '').replace(/[^0-9]/g, '');
+                          return cleanItemPhone && cleanOrderPhone && cleanItemPhone === cleanOrderPhone;
+                        });
+
+                        return (
+                          <div
+                            key={item.id}
+                            onClick={() => {
+                              setSelectedChatCustomerId(item.id);
+                              markChatAsRead(item.id);
+                            }}
+                            className={`group w-full text-left p-4 rounded-2xl border transition-all duration-150 flex items-center justify-between gap-3 sm:gap-4 cursor-pointer hover:shadow-xl active:scale-[0.99] ${
+                              item.hasUnread
+                                ? 'bg-slate-900/95 border-emerald-500/60 shadow-lg shadow-emerald-950/20 hover:bg-slate-850'
+                                : 'bg-slate-900/60 border-slate-800 hover:bg-slate-850 hover:border-slate-700'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                              {/* Avatar grand format avec indicateur */}
+                              <div className="relative shrink-0">
+                                <div
+                                  className={`w-12 h-12 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center font-black text-sm sm:text-base border shadow-md ${
+                                    isBlocked
+                                      ? 'bg-rose-950 border-rose-600 text-rose-300'
+                                      : item.hasUnread
+                                      ? 'bg-gradient-to-br from-emerald-600 to-teal-700 border-emerald-400 text-white shadow-emerald-600/30'
+                                      : 'bg-slate-800 border-slate-700 text-slate-200'
+                                  }`}
+                                >
+                                  {item.clientName.substring(0, 2).toUpperCase()}
+                                </div>
+                                {item.hasUnread && (
+                                  <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-slate-950 shadow-xs" />
+                                )}
                               </div>
-                              <p className="text-[10px] text-slate-300 leading-tight">
-                                {matchingOrder.items.length} article(s) commandé(s) • Expédition : {matchingOrder.shippingSchedule}
-                                {matchingOrder.isDepositRequired ? ` • Acompte 70% : $${matchingOrder.depositAmount.toFixed(2)}` : ' • Réglé'}
-                              </p>
-                              <button
-                                type="button"
-                                onClick={() => setSelectedReceiptOrder(matchingOrder)}
-                                className="w-full py-2 px-3 bg-red-600 hover:bg-red-500 text-white rounded-lg text-xs font-black transition flex items-center justify-center gap-2 shadow-md cursor-pointer active:scale-95"
-                              >
-                                <Download className="w-3.5 h-3.5" />
-                                <span>Télécharger la Facture / Reçu PDF</span>
-                              </button>
-                            </div>
-                          )}
 
-                          <ChatMessageBubbleImages
-                            images={msg.images}
-                            onImageClick={(url) => setAdminLightboxImage(url)}
-                          />
+                              {/* Détails du client & extrait du message */}
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                                    <h3 className="font-black text-sm sm:text-base text-white truncate group-hover:text-red-400 transition">
+                                      {item.clientName}
+                                    </h3>
+                                    {item.customer?.status === 'valide' && (
+                                      <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-500/30 font-semibold shrink-0">
+                                        Client Actif
+                                      </span>
+                                    )}
+                                    {clientPendingOrders.length > 0 && (
+                                      <span className="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full border border-amber-500/30 font-semibold shrink-0 flex items-center gap-1">
+                                        <ShoppingBag className="w-3 h-3 text-amber-400" />
+                                        <span>{clientPendingOrders.length} cmd</span>
+                                      </span>
+                                    )}
+                                    {isBlocked && (
+                                      <span className="text-[10px] bg-rose-500/20 text-rose-300 px-2 py-0.5 rounded-full border border-rose-500/30 font-semibold shrink-0">
+                                        Bloqué
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {item.lastTime && (
+                                    <span className="text-[11px] text-slate-400 shrink-0 font-mono">
+                                      {formatFriendlyDateTime(item.lastTime).replace("Aujourd'hui à ", '')}
+                                    </span>
+                                  )}
+                                </div>
+
+                                <div className="flex items-center gap-2 text-xs text-slate-400 font-mono mt-0.5">
+                                  <span>{item.clientPhone || 'Sans numéro'}</span>
+                                  {item.customer?.city && (
+                                    <>
+                                      <span>•</span>
+                                      <span className="font-sans text-slate-400">{item.customer.city}</span>
+                                    </>
+                                  )}
+                                </div>
+
+                                <p className="text-xs sm:text-sm text-slate-300 truncate mt-1 flex items-center gap-1.5">
+                                  {isLastFromAdmin && (
+                                    <span className="text-amber-400 font-bold shrink-0">
+                                      👑 Vous :
+                                    </span>
+                                  )}
+                                  <span className="truncate">
+                                    {lastMsg?.text || (lastMsg?.images ? '📷 Photo reçue' : 'Nouvelle conversation')}
+                                  </span>
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Badge non lu & Flèche vers la discussion */}
+                            <div className="flex items-center gap-3 shrink-0">
+                              {item.hasUnread && (
+                                <span className="px-2.5 py-1 rounded-full bg-red-600 text-white text-xs font-black shadow-md shadow-red-600/40">
+                                  {item.unreadCount} non lu{item.unreadCount > 1 ? 's' : ''}
+                                </span>
+                              )}
+                              <div className="w-9 h-9 rounded-xl bg-slate-800 group-hover:bg-red-600 group-hover:text-white text-slate-400 flex items-center justify-center transition shadow-sm">
+                                <ChevronRight className="w-5 h-5" />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              /* ================= ÉCRAN 2 : CONVERSATION PLEIN ÉCRAN (STYLE WHATSAPP / MESSENGER) ================= */
+              <div className="flex-1 flex flex-col bg-slate-900 overflow-hidden">
+                {(() => {
+                  const activeConv = chatConversations.find((c) => c.id === selectedChatCustomerId);
+                  const activeCust = activeConv?.customer || customers.find((c) => c.id === selectedChatCustomerId);
+                  const displayName = activeCust?.fullName || activeConv?.clientName || 'Client Moto';
+                  const displayPhone = activeCust?.phone || activeConv?.clientPhone || '';
+                  const displayCity = activeCust?.city || '';
+                  const otherUnreadCount = chatConversations
+                    .filter((c) => c.id !== selectedChatCustomerId && c.hasUnread)
+                    .reduce((acc, c) => acc + c.unreadCount, 0);
+
+                  return (
+                    <div className="p-3.5 sm:p-4 border-b border-slate-800 flex items-center justify-between gap-3 bg-slate-950 shrink-0 shadow-md">
+                      {/* BOUTON RETOUR TRÈS CLAIR STYLE WHATSAPP */}
+                      <div className="flex items-center gap-3 min-w-0">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedChatCustomerId(null)}
+                          className="flex items-center gap-2 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs sm:text-sm font-bold border border-slate-700 shadow-md transition active:scale-95 cursor-pointer shrink-0"
+                          title="Revenir à la liste des discussions"
+                        >
+                          <ArrowLeft className="w-4 h-4 text-red-500" />
+                          <span className="hidden sm:inline">Retour aux discussions</span>
+                          <span className="sm:hidden">Retour</span>
+                          {otherUnreadCount > 0 && (
+                            <span className="px-1.5 py-0.2 bg-red-600 text-white text-[10px] rounded-full font-black">
+                              +{otherUnreadCount}
+                            </span>
+                          )}
+                        </button>
+
+                        {/* Profil du client sélectionné */}
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-red-600 to-rose-700 text-white flex items-center justify-center font-black text-sm shadow-md shrink-0">
+                            {displayName.substring(0, 2).toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <h3 className="text-sm sm:text-base font-black text-white truncate">
+                                {displayName}
+                              </h3>
+                              {activeCust?.status === 'valide' && (
+                                <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-500/30 font-semibold hidden md:inline">
+                                  Client Actif
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-slate-400 truncate font-mono">
+                              {displayPhone} {displayCity ? `• ${displayCity}` : ''}
+                            </p>
+                          </div>
                         </div>
-                        <span className="text-[10px] text-slate-500 mt-1 px-1 font-mono flex items-center gap-1">
-                          <span>{isFromAdmin ? '👑 Vous' : `👤 ${msg.customerName}`}</span>
-                          <span>•</span>
-                          <span>{formatFriendlyDateTime(msg.createdAt)}</span>
+                      </div>
+
+                      {/* Action WhatsApp direct */}
+                      {displayPhone && (
+                        <a
+                          href={`https://wa.me/${displayPhone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
+                            `Bonjour ${displayName}, je vous contacte depuis la direction HOUSSETECH concernant votre commande et nos échanges.`
+                          )}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-md transition shrink-0"
+                          title="Ouvrir WhatsApp direct"
+                        >
+                          <Phone className="w-3.5 h-3.5" />
+                          <span className="hidden md:inline">WhatsApp</span>
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* BANDEAU INTERACTIF DES COMMANDES DU CLIENT (CONFIRMER OU REFUSER DIRECTEMENT) */}
+                {(() => {
+                  const activeConv = chatConversations.find((c) => c.id === selectedChatCustomerId);
+                  const activeCust = activeConv?.customer || customers.find((c) => c.id === selectedChatCustomerId);
+                  const displayPhone = activeCust?.phone || activeConv?.clientPhone || '';
+                  const cleanCustPhone = (displayPhone || '').replace(/[^0-9]/g, '');
+
+                  const clientOrders = orders.filter((o) => {
+                    if (o.customerId === selectedChatCustomerId) return true;
+                    const cleanOrderPhone = (o.customerPhone || '').replace(/[^0-9]/g, '');
+                    return cleanCustPhone && cleanOrderPhone && cleanCustPhone === cleanOrderPhone;
+                  });
+
+                  if (clientOrders.length === 0) return null;
+
+                  return (
+                    <div className="bg-slate-950 border-b border-slate-800 p-3 sm:p-4 space-y-2.5 shrink-0">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black uppercase text-amber-400 flex items-center gap-1.5">
+                          <ShoppingBag className="w-4 h-4 text-amber-400" />
+                          <span>Commandes de ce Client ({clientOrders.length})</span>
+                        </span>
+                        <span className="text-[11px] text-slate-400">
+                          Vous pouvez confirmer ou refuser la commande ici directement
                         </span>
                       </div>
-                    );
-                  })}
-              </div>
 
-              <form onSubmit={handleSendAdminChatReply} className="p-3 border-t border-slate-800 space-y-2">
-                <ChatImageUploader
-                  images={adminChatImages}
-                  onImagesChange={setAdminChatImages}
-                />
+                      <div className="flex gap-3 overflow-x-auto pb-1">
+                        {clientOrders.map((ord) => {
+                          const isAccepted = ord.adminDecision === 'acceptee';
+                          return (
+                            <div
+                              key={ord.id}
+                              className={`min-w-[290px] sm:min-w-[340px] p-3 rounded-2xl border flex flex-col justify-between gap-2.5 ${
+                                isAccepted
+                                  ? 'bg-emerald-950/40 border-emerald-600/40'
+                                  : 'bg-slate-900 border-red-500/50 shadow-md'
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="font-mono font-black text-xs text-white">N° {ord.orderNumber}</span>
+                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                      isAccepted ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-300'
+                                    }`}>
+                                      {isAccepted ? 'Validée' : 'À décider'}
+                                    </span>
+                                  </div>
+                                  <p className="text-[11px] text-slate-300 mt-1">
+                                    {ord.items.length} article(s) • Expédition : {ord.shippingSchedule || 'Samedi'}
+                                  </p>
+                                </div>
+                                <span className="font-mono font-black text-sm text-emerald-400 shrink-0">
+                                  ${ord.total.toFixed(2)} USD
+                                </span>
+                              </div>
 
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => adminFileInputRef.current?.click()}
-                    className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl border border-slate-700 transition flex items-center gap-1.5 shrink-0 cursor-pointer"
-                    title="Joindre une ou plusieurs photos"
-                  >
-                    <ImagePlus className="w-4 h-4 text-red-500" />
-                    <span className="hidden sm:inline text-xs font-semibold">Photo</span>
-                  </button>
+                              <div className="flex items-center gap-2 pt-1 border-t border-slate-800/80">
+                                {!isAccepted ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => acceptOrder(ord.id)}
+                                    className="flex-1 py-1.5 px-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm active:scale-95 cursor-pointer"
+                                    title="Confirmer et valider cette commande"
+                                  >
+                                    <Check className="w-3.5 h-3.5" />
+                                    <span>Confirmer la commande</span>
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedReceiptOrder(ord)}
+                                    className="flex-1 py-1.5 px-2.5 bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-600/40 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer"
+                                    title="Voir le reçu officiel PDF"
+                                  >
+                                    <FileText className="w-3.5 h-3.5 text-emerald-400" />
+                                    <span>Reçu PDF</span>
+                                  </button>
+                                )}
 
-                  <input
-                    ref={adminFileInputRef}
-                    type="file"
-                    multiple
-                    accept="image/*"
-                    onChange={(e) => {
-                      const files = e.target.files;
-                      if (!files || files.length === 0) return;
-                      const promises = Array.from(files).map((f) => {
-                        return new Promise<string>((res) => {
-                          const r = new FileReader();
-                          r.onload = (ev) => res(ev.target?.result as string);
-                          r.readAsDataURL(f);
-                        });
-                      });
-                      Promise.all(promises).then((imgs) => {
-                        setAdminChatImages((prev) => [...prev, ...imgs]);
-                        if (adminFileInputRef.current) adminFileInputRef.current.value = '';
-                      });
-                    }}
-                    className="hidden"
-                  />
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setOrderToReject(ord);
+                                    setRejectReason('Article indisponible ou acompte non conforme');
+                                  }}
+                                  className="py-1.5 px-2.5 bg-rose-950/80 hover:bg-rose-900 text-rose-300 border border-rose-600/40 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer"
+                                  title="Refuser et supprimer la commande de la liste"
+                                >
+                                  <XCircle className="w-3.5 h-3.5 text-rose-400" />
+                                  <span>Refuser</span>
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
 
-                  <input
-                    type="text"
-                    placeholder="Répondre au client ou envoyer des photos..."
-                    value={adminReplyText}
-                    onChange={(e) => setAdminReplyText(e.target.value)}
-                    className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-400 focus:outline-hidden focus:border-red-500"
-                  />
+                {/* Horaires et règles de travail */}
+                <EnterpriseWorkingHoursBanner compact={true} />
 
-                  <button
-                    type="submit"
-                    disabled={!adminReplyText.trim() && adminChatImages.length === 0}
-                    className="px-4 py-2 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition flex items-center gap-1.5 shrink-0 cursor-pointer"
-                  >
-                    <Send className="w-3.5 h-3.5" />
-                    <span>Envoyer</span>
-                  </button>
+                {/* Fil des messages en plein écran */}
+                <div className="flex-1 p-4 sm:p-6 overflow-y-auto space-y-4 bg-slate-950/70 text-xs sm:text-sm">
+                  {chatMessages
+                    .filter((m) => {
+                      if (m.customerId === selectedChatCustomerId) return true;
+                      const cust = customers.find((c) => c.id === selectedChatCustomerId);
+                      const cleanCustPhone = (cust?.phone || '').replace(/[^0-9]/g, '');
+                      const activeConv = chatConversations.find((c) => c.id === selectedChatCustomerId);
+                      const cleanConvPhone = (activeConv?.clientPhone || '').replace(/[^0-9]/g, '');
+                      const targetPhone = cleanCustPhone || cleanConvPhone;
+                      const cleanMsgPhone = (m.customerPhone || '').replace(/[^0-9]/g, '');
+                      if (targetPhone && cleanMsgPhone && targetPhone === cleanMsgPhone) return true;
+                      return false;
+                    })
+                    .map((msg) => {
+                      const isFromAdmin = msg.sender === 'admin';
+                      const matchingOrder = orders.find(
+                        (o) =>
+                          o.id === msg.orderId ||
+                          (msg.text && o.orderNumber && msg.text.includes(o.orderNumber))
+                      );
+
+                      return (
+                        <div
+                          key={msg.id}
+                          className={`flex flex-col ${isFromAdmin ? 'items-end' : 'items-start'}`}
+                        >
+                          <div
+                            className={`max-w-[88%] sm:max-w-[78%] p-3.5 sm:p-4 rounded-2xl shadow-lg transition ${
+                              isFromAdmin
+                                ? 'bg-gradient-to-br from-red-600 to-rose-700 text-white rounded-tr-xs shadow-red-600/20'
+                                : 'bg-slate-900 text-slate-100 rounded-tl-xs border-2 border-slate-700 shadow-md'
+                            }`}
+                          >
+                            {/* En-tête de bulle très distinctif */}
+                            <div
+                              className={`flex items-center gap-2 mb-2 pb-1.5 border-b ${
+                                isFromAdmin ? 'border-white/20 justify-end' : 'border-slate-800'
+                              }`}
+                            >
+                              {isFromAdmin ? (
+                                <>
+                                  <span className="text-[11px] font-black text-amber-200">
+                                    👑 VOUS (ADMINISTRATEUR)
+                                  </span>
+                                  <span className="px-1.5 py-0.5 rounded bg-black/30 text-[10px] font-bold text-amber-300">
+                                    Direction
+                                  </span>
+                                </>
+                              ) : (
+                                <>
+                                  <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold">
+                                    👤 CLIENT
+                                  </span>
+                                  <span className="text-[11px] font-black text-slate-200">
+                                    {msg.customerName || 'Client'}
+                                  </span>
+                                </>
+                              )}
+                            </div>
+
+                            {msg.text && (
+                              <p className="leading-relaxed whitespace-pre-line text-xs sm:text-sm font-normal">
+                                {msg.text}
+                              </p>
+                            )}
+
+                            {/* CARTE D'ACHAT & DÉCISION DIRECTE (CONFIRMER / REFUSER) DANS LA BULLE DE MESSAGE */}
+                            {matchingOrder && (
+                              <div className="mt-3 p-3.5 rounded-xl bg-slate-950/90 border-2 border-red-500/60 text-left space-y-2 shadow-inner">
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-[11px] font-black text-red-400 flex items-center gap-1.5">
+                                    <FileText className="w-4 h-4 text-red-500" />
+                                    <span>Facture & Commande {matchingOrder.orderNumber}</span>
+                                  </span>
+                                  <span className="font-mono text-xs font-black text-emerald-400">
+                                    ${matchingOrder.total.toFixed(2)} USD
+                                  </span>
+                                </div>
+                                <p className="text-[11px] text-slate-300 leading-tight">
+                                  {matchingOrder.items.length} article(s) commandé(s) • Expédition : {matchingOrder.shippingSchedule}
+                                  {matchingOrder.isDepositRequired
+                                    ? ` • Acompte 70% : $${matchingOrder.depositAmount.toFixed(2)}`
+                                    : ' • Réglé'}
+                                </p>
+
+                                {/* Actions directes Confirmer / Refuser la commande dans la conversation */}
+                                <div className="flex items-center gap-2 pt-1 flex-wrap">
+                                  {matchingOrder.adminDecision !== 'acceptee' ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => acceptOrder(matchingOrder.id)}
+                                      className="flex-1 min-w-[130px] py-2 px-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-black transition flex items-center justify-center gap-1.5 shadow-md active:scale-95 cursor-pointer"
+                                    >
+                                      <Check className="w-3.5 h-3.5" />
+                                      <span>Confirmer commande</span>
+                                    </button>
+                                  ) : (
+                                    <div className="flex-1 min-w-[130px] py-1.5 px-2.5 bg-emerald-950/70 text-emerald-300 border border-emerald-500/30 rounded-lg text-xs font-bold text-center">
+                                      ✅ Commande Confirmée
+                                    </div>
+                                  )}
+
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setOrderToReject(matchingOrder);
+                                      setRejectReason('Article indisponible ou acompte non conforme');
+                                    }}
+                                    className="py-2 px-3 bg-rose-950/80 hover:bg-rose-900 border border-rose-600/40 text-rose-300 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer"
+                                    title="Refuser et supprimer cette commande de la liste"
+                                  >
+                                    <XCircle className="w-3.5 h-3.5 text-rose-400" />
+                                    <span>Refuser</span>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedReceiptOrder(matchingOrder)}
+                                    className="py-2 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer"
+                                    title="Voir et télécharger le reçu officiel"
+                                  >
+                                    <Download className="w-3.5 h-3.5 text-red-400" />
+                                    <span className="hidden sm:inline">Facture PDF</span>
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+
+                            <ChatMessageBubbleImages
+                              images={msg.images}
+                              onImageClick={(url) => setAdminLightboxImage(url)}
+                            />
+                          </div>
+                          <span className="text-[10px] text-slate-500 mt-1 px-1 font-mono flex items-center gap-1">
+                            <span>{isFromAdmin ? '👑 Vous' : `👤 ${msg.customerName}`}</span>
+                            <span>•</span>
+                            <span>{formatFriendlyDateTime(msg.createdAt)}</span>
+                          </span>
+                        </div>
+                      );
+                    })}
+                  <div ref={adminMessagesEndRef} />
                 </div>
-              </form>
-            </div>
+
+                {/* Formulaire d'envoi en bas */}
+                <form onSubmit={handleSendAdminChatReply} className="p-3 sm:p-4 border-t border-slate-800 space-y-2.5 bg-slate-900">
+                  <ChatImageUploader
+                    images={adminChatImages}
+                    onImagesChange={setAdminChatImages}
+                  />
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => adminFileInputRef.current?.click()}
+                      className="p-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl border border-slate-700 transition flex items-center gap-1.5 shrink-0 cursor-pointer"
+                      title="Joindre une ou plusieurs photos"
+                    >
+                      <ImagePlus className="w-4 h-4 text-red-500" />
+                      <span className="hidden sm:inline text-xs font-semibold">Photo</span>
+                    </button>
+
+                    <input
+                      ref={adminFileInputRef}
+                      type="file"
+                      multiple
+                      accept="image/*"
+                      onChange={(e) => {
+                        const files = e.target.files;
+                        if (!files || files.length === 0) return;
+                        const promises = Array.from(files).map((f) => {
+                          return new Promise<string>((res) => {
+                            const r = new FileReader();
+                            r.onload = (ev) => res(ev.target?.result as string);
+                            r.readAsDataURL(f);
+                          });
+                        });
+                        Promise.all(promises).then((imgs) => {
+                          setAdminChatImages((prev) => [...prev, ...imgs]);
+                          if (adminFileInputRef.current) adminFileInputRef.current.value = '';
+                        });
+                      }}
+                      className="hidden"
+                    />
+
+                    <input
+                      type="text"
+                      placeholder="Répondre au client ou envoyer des photos..."
+                      value={adminReplyText}
+                      onChange={(e) => setAdminReplyText(e.target.value)}
+                      className="flex-1 px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs sm:text-sm text-white placeholder-slate-400 focus:outline-hidden focus:border-red-500"
+                    />
+
+                    <button
+                      type="submit"
+                      disabled={!adminReplyText.trim() && adminChatImages.length === 0}
+                      className="px-4 sm:px-5 py-2.5 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white font-bold text-xs sm:text-sm rounded-xl transition flex items-center gap-1.5 shrink-0 cursor-pointer active:scale-95 shadow-md shadow-red-600/30"
+                    >
+                      <Send className="w-4 h-4" />
+                      <span className="hidden sm:inline">Envoyer</span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
           </div>
         )}
 
@@ -2424,6 +2725,76 @@ export const AdminDashboard: React.FC<{
           isOpen={true}
           onClose={() => setSelectedReceiptOrder(null)}
         />
+      )}
+
+      {/* Modal de Confirmation du Refus et Suppression de Commande */}
+      {orderToReject && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-slate-900 border-2 border-rose-600/70 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-rose-600/20 text-rose-500 border border-rose-500/40 flex items-center justify-center shrink-0">
+                <XCircle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-white">
+                  Refuser et Supprimer la Commande
+                </h3>
+                <p className="text-xs text-slate-400">
+                  Cette action supprimera la commande de la liste et informera le client.
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3.5 bg-slate-950 rounded-2xl border border-slate-800 space-y-1.5 text-xs">
+              <div className="flex justify-between text-slate-300">
+                <span>N° Commande :</span>
+                <span className="font-mono font-black text-white">{orderToReject.orderNumber}</span>
+              </div>
+              <div className="flex justify-between text-slate-300">
+                <span>Client :</span>
+                <span className="font-bold text-white">{orderToReject.customerName} ({orderToReject.customerPhone})</span>
+              </div>
+              <div className="flex justify-between text-slate-300">
+                <span>Montant total :</span>
+                <span className="font-mono font-black text-emerald-400">${orderToReject.total.toFixed(2)} USD</span>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-300 block">
+                Motif du refus (notifié dans la messagerie du client) :
+              </label>
+              <textarea
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                rows={3}
+                className="w-full p-3 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-rose-500 resize-none"
+                placeholder="Ex : Article indisponible en magasin ou acompte non reçu..."
+              />
+            </div>
+
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  rejectOrder(orderToReject.id, rejectReason);
+                  setOrderToReject(null);
+                }}
+                className="flex-1 py-2.5 px-4 bg-rose-600 hover:bg-rose-500 text-white font-black text-xs rounded-xl shadow-lg shadow-rose-600/30 transition flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Confirmer le Refus & Supprimer</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setOrderToReject(null)}
+                className="py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl transition cursor-pointer"
+              >
+                Annuler
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Lightbox photo plein écran */}

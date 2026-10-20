@@ -3,7 +3,7 @@ import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import fs from 'fs';
 import { initializeApp } from 'firebase/app';
-import { getFirestore, doc, setDoc } from 'firebase/firestore';
+import { getFirestore, doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { formatKinshasaDateTime } from './src/utils/dateUtils';
 import {
   INITIAL_PRODUCTS,
@@ -456,6 +456,23 @@ Bonjour ${customerToReturn.fullName}, votre compte client a été créé et acti
     res.json({ success: true, order: db.orders[orderIndex] });
   });
 
+  // Suppression d'une commande refusée
+  app.delete('/api/orders/:id', (req, res) => {
+    const { id } = req.params;
+    db.orders = db.orders.filter((o) => o.id !== id);
+    db.notifications = db.notifications.filter((n) => n.orderId !== id);
+    saveDatabase(db);
+    console.log(`[API] Commande ${id} supprimée définitivement suite au refus`);
+
+    if (serverFirestoreDb) {
+      deleteDoc(doc(serverFirestoreDb, 'orders', id))
+        .then(() => console.log(`[Server] Commande ${id} supprimée de Firestore.`))
+        .catch((e: any) => console.warn('[Server] Note delete order Firestore:', e));
+    }
+
+    res.json({ success: true });
+  });
+
   // 5. Chat API (avec photos multiples)
   app.get('/api/chat', (req, res) => {
     res.json(db.chatMessages);
@@ -520,15 +537,37 @@ Bonjour ${customerToReturn.fullName}, votre compte client a été créé et acti
 
   // Marquer messages lus
   app.patch('/api/chat/read', (req, res) => {
-    const { customerId } = req.body;
-    if (customerId) {
+    const { customerId, phone } = req.body;
+    const cleanPhone = (phone || '').replace(/[^0-9]/g, '');
+    if (customerId || cleanPhone) {
       db.chatMessages.forEach((m) => {
-        if (m.customerId === customerId) {
+        const msgPhone = (m.customerPhone || '').replace(/[^0-9]/g, '');
+        if (
+          (customerId && m.customerId === customerId) ||
+          (cleanPhone && msgPhone && cleanPhone === msgPhone)
+        ) {
           m.read = true;
+        }
+      });
+      db.notifications.forEach((n) => {
+        if (n.customerId === customerId) {
+          n.read = true;
         }
       });
       saveDatabase(db);
     }
+    res.json({ success: true });
+  });
+
+  // Marquer tous les messages et notifications comme lus
+  app.patch('/api/chat/read-all', (req, res) => {
+    db.chatMessages.forEach((m) => {
+      m.read = true;
+    });
+    db.notifications.forEach((n) => {
+      n.read = true;
+    });
+    saveDatabase(db);
     res.json({ success: true });
   });
 
